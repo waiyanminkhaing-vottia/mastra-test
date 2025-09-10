@@ -1,0 +1,36 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug Mastra Dev",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["run", "dev:debug"],
+      "env": {
+        "DEBUG": "mastra:*",
+        "NODE_ENV": "development"
+      },
+      "console": "integratedTerminal",
+      "internalConsoleOptions": "neverOpen",
+      "sourceMaps": true,
+      "outFiles": ["${workspaceFolder}/dist/**/*.js"],
+      "skipFiles": ["<node_internals>/**"]
+    },
+    {
+      "name": "Debug Jest Tests",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["test"],
+      "env": {
+        "DEBUG": "*",
+        "NODE_ENV": "test"
+      },
+      "console": "integratedTerminal",
+      "internalConsoleOptions": "neverOpen",
+      "sourceMaps": true,
+      "skipFiles": ["<node_internals>/**"]
+    }
+  ]
+}

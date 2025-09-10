@@ -1,0 +1,23 @@
+{
+  "editor.formatOnSave": true,
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+  "editor.codeActionsOnSave": {
+    "source.fixAll.eslint": "explicit",
+    "source.organizeImports": "explicit",
+    "source.removeUnusedImports": "explicit"
+  },
+  "typescript.preferences.useAliasesForRenames": false,
+  "typescript.updateImportsOnFileMove.enabled": "always",
+  "typescript.suggest.autoImports": true,
+  "typescript.preferences.includePackageJsonAutoImports": "auto",
+  "typescript.suggest.includeAutomaticOptionalChainCompletions": true,
+  "files.associations": {
+    "*.env.*": "dotenv"
+  },
+  "eslint.validate": [
+    "javascript",
+    "javascriptreact",
+    "typescript",
+    "typescriptreact"
+  ]
+}

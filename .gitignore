@@ -1,0 +1,39 @@
+# Dependencies
+node_modules/
+pnpm-lock.yaml*
+
+# Production build
+dist/
+build/
+output.txt
+
+# Environment variables
+.env
+.env.local
+.env.development
+.env.*.local
+
+# IDE
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Coverage
+coverage/
+
+# Database
+*.db
+*.db-*
+
+# Temporary files
+*.tmp
+*.temp
+
+# Mastra
+.mastra/
