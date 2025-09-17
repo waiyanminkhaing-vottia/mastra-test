@@ -1,11 +1,9 @@
-import { Mastra } from '@mastra/core';
-import { PinoLogger } from '@mastra/loggers';
+import { Mastra } from '@mastra/core/mastra';
+import { type LogLevel, PinoLogger } from '@mastra/loggers';
 
-const logLevel = process.env.LOG_LEVEL || 'info';
-
-export const mastra: Mastra = new Mastra({
+export const mastra = new Mastra({
   logger: new PinoLogger({
-    name: 'mastra-test',
-    level: logLevel as any,
+    name: 'Mastra',
+    level: (process.env.LOG_LEVEL as LogLevel) ?? 'info',
   }),
 });

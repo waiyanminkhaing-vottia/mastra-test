@@ -3,7 +3,10 @@
     "esbenp.prettier-vscode",
     "ms-vscode.vscode-typescript-next",
     "dbaeumer.vscode-eslint",
+    "ms-vscode.vscode-json",
+    "editorconfig.editorconfig",
     "bradlc.vscode-tailwindcss",
-    "ms-vscode.vscode-json"
+    "ms-vscode.vscode-json5",
+    "yzhang.markdown-all-in-one"
   ]
 }

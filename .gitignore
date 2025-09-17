@@ -37,3 +37,12 @@ coverage/
 
 # Mastra
 .mastra/
+*.mastra.js
+*.mastra.ts
+.mastra.*
+mastra-generated/
+mastra-cache/
+.mastra-cache/
+mastra.lock
+mastra-lock.json
+.mastra.lock
