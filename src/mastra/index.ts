@@ -1,9 +1,16 @@
 import { Mastra } from '@mastra/core/mastra';
-import { type LogLevel, PinoLogger } from '@mastra/loggers';
+
+import { mainAgent } from './agents/main-agent';
+import { logger } from './lib/logger';
+import { sharedStorage, sharedVector } from './lib/memory';
 
 export const mastra = new Mastra({
-  logger: new PinoLogger({
-    name: 'Mastra',
-    level: (process.env.LOG_LEVEL as LogLevel) ?? 'info',
-  }),
+  logger,
+  agents: {
+    mainAgent,
+  },
+  storage: sharedStorage,
+  vectors: {
+    pgVector: sharedVector,
+  },
 });

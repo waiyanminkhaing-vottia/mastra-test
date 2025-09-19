@@ -1,6 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 
-import { mastra } from '../mastra';
+import logger from './logger';
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
@@ -36,8 +36,6 @@ export const prisma = globalForPrisma.prisma ?? prismaWithLogging;
 
 // Set up Mastra logging for Prisma events
 if (!globalForPrisma.prisma) {
-  const logger = mastra.getLogger();
-
   prismaWithLogging.$on(
     'query',
     (e: {

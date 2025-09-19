@@ -46,3 +46,8 @@ mastra-cache/
 mastra.lock
 mastra-lock.json
 .mastra.lock
+
+# Project specific
+prompts/
+docs/
+remixed.html
