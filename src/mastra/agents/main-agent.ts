@@ -3,6 +3,8 @@ import { Agent } from '@mastra/core';
 import { sharedMemory } from '../lib/memory';
 import { zapierMcpClient } from '../mcp/zapier-client';
 import { getAgentConfig } from '../services/agent-config';
+import { generateCustomerId } from '../tools/generateCustomerId';
+import { generateReservationId } from '../tools/generateReservationId';
 import { getCurrentTime } from '../tools/getCurrentTime';
 
 const agentName = 'main-agent';
@@ -26,9 +28,16 @@ const createMainAgent = async () => {
     memory: sharedMemory,
     tools: {
       getCurrentTime,
+      generateCustomerId,
+      generateReservationId,
       ...zapierTools,
     },
   });
 };
 
-export const mainAgent = await createMainAgent();
+let _mainAgent: Agent | null = null;
+
+export const getMainAgent = async (): Promise<Agent> => {
+  _mainAgent ??= await createMainAgent();
+  return _mainAgent;
+};
