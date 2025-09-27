@@ -2,11 +2,11 @@ import js from '@eslint/js';
 import typescript from '@typescript-eslint/eslint-plugin';
 import typescriptParser from '@typescript-eslint/parser';
 import prettier from 'eslint-config-prettier';
-import unusedImports from 'eslint-plugin-unused-imports';
-import simpleImportSort from 'eslint-plugin-simple-import-sort';
 import importPlugin from 'eslint-plugin-import';
 import jsdoc from 'eslint-plugin-jsdoc';
+import simpleImportSort from 'eslint-plugin-simple-import-sort';
 import sonarjs from 'eslint-plugin-sonarjs';
+import unusedImports from 'eslint-plugin-unused-imports';
 
 export default [
   js.configs.recommended,
@@ -19,7 +19,7 @@ export default [
       'node_modules/**',
       'coverage/**',
       '*.min.js',
-      'mastra-generated/**'
+      'mastra-generated/**',
     ],
   },
   {
@@ -46,9 +46,9 @@ export default [
       '@typescript-eslint': typescript,
       'unused-imports': unusedImports,
       'simple-import-sort': simpleImportSort,
-      'import': importPlugin,
-      'jsdoc': jsdoc,
-      'sonarjs': sonarjs,
+      import: importPlugin,
+      jsdoc: jsdoc,
+      sonarjs: sonarjs,
     },
     rules: {
       ...typescript.configs.recommended.rules,
@@ -99,8 +99,8 @@ export default [
       'no-new-wrappers': 'error',
 
       // Best practices
-      'eqeqeq': ['error', 'always', { null: 'ignore' }],
-      'curly': ['error', 'all'],
+      eqeqeq: ['error', 'always', { null: 'ignore' }],
+      curly: ['error', 'all'],
       'dot-notation': 'error',
       'no-empty-function': 'error',
       'no-floating-decimal': 'error',
@@ -109,7 +109,7 @@ export default [
       'no-void': 'error',
       'no-with': 'error',
       'wrap-iife': 'error',
-      'yoda': 'error',
+      yoda: 'error',
 
       // Unused imports handling
       'unused-imports/no-unused-imports': 'error',
@@ -205,7 +205,11 @@ export default [
   },
   // Specific rules for Mastra utility and generated files
   {
-    files: ['src/mastra/**/*.{ts,tsx}', 'src/agents/**/*.{ts,tsx}', 'src/workflows/**/*.{ts,tsx}'],
+    files: [
+      'src/mastra/**/*.{ts,tsx}',
+      'src/agents/**/*.{ts,tsx}',
+      'src/workflows/**/*.{ts,tsx}',
+    ],
     rules: {
       'jsdoc/require-jsdoc': 'off', // Less strict JSDoc for utility files
       'sonarjs/no-duplicate-string': 'off', // Allow some duplication in config files

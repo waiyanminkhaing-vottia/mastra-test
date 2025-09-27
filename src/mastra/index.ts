@@ -1,25 +1,25 @@
 import { Mastra } from '@mastra/core/mastra';
 
-import { getMainAgent } from './agents/main-agent';
+import { getMainAgentSync } from './agents/main-agent';
+import { healthRoute } from './api/health';
 import { logger } from './lib/logger';
 import { sharedStorage, sharedVector } from './lib/memory';
 
-let _mastra: Mastra | null = null;
-
-export const getMastra = async (): Promise<Mastra> => {
-  if (!_mastra) {
-    const mainAgent = await getMainAgent();
-
-    _mastra = new Mastra({
-      logger,
-      agents: {
-        mainAgent,
-      },
-      storage: sharedStorage,
-      vectors: {
-        pgVector: sharedVector,
-      },
-    });
-  }
-  return _mastra;
-};
+export const mastra = new Mastra({
+  logger,
+  agents: { mainAgent: await getMainAgentSync() },
+  storage: sharedStorage,
+  vectors: {
+    pgVector: sharedVector,
+  },
+  server: {
+    apiRoutes: [healthRoute],
+  },
+  telemetry: {
+    serviceName: 'mastra-test',
+    enabled: true,
+    export: {
+      type: 'console',
+    },
+  },
+});

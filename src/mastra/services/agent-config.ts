@@ -47,13 +47,23 @@ export const getAgentConfig = async (
       },
     });
 
+    let labelId = agent.labelId;
+
+    // If agent has no labelId, check DEMO environment variable
+    if (!agent.labelId && process.env.DEMO && process.env.DEMO !== 'default') {
+      const label = await prisma.promptLabel.findUnique({
+        where: { name: process.env.DEMO },
+      });
+      labelId = label?.id ?? null;
+    }
+
     let prompt;
-    if (agent.labelId) {
+    if (labelId) {
       prompt = await prisma.promptVersion.findUniqueOrThrow({
         where: {
           promptId_labelId: {
             promptId: agent.promptId,
-            labelId: agent.labelId,
+            labelId,
           },
         },
       });
