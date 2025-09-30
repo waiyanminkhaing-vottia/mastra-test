@@ -168,8 +168,16 @@ jobs:
             exit 1
           fi
 
-          # Build image using regular docker build with build args
+          # Set port based on service
+          if [ "$SERVICE" = "fasthelp" ]; then
+            PORT=4001
+          else
+            PORT=4000
+          fi
+
+          # Build image using regular docker build with PORT argument
           sudo docker build \
+            --build-arg PORT=$PORT \
             --secret id=github_token,src=/tmp/github_token \
             -t $IMAGE_NAME:latest \
             .
@@ -208,11 +216,17 @@ jobs:
             # Ensure Docker network exists
             sudo docker network create mastra-test-network --driver bridge 2>/dev/null || true
 
-            # Map service to container name
+            # Set environment file and service based on manual input
+            ENV_FILE="${{ github.event.inputs.environment }}"
             SERVICE="${{ github.event.inputs.service }}"
+            BRANCH="${{ github.ref_name }}"
+
+            # Map service to port and container name (same database for all services)
             if [ "$SERVICE" = "fasthelp" ]; then
+              PORT=4001
               CONTAINER_NAME="mastra-test-fasthelp"
             else
+              PORT=4000
               CONTAINER_NAME="mastra-test"
             fi
 
@@ -223,20 +237,6 @@ jobs:
             # Stop and remove existing container
             sudo docker stop $CONTAINER_NAME 2>/dev/null || true
             sudo docker rm $CONTAINER_NAME 2>/dev/null || true
-
-            # Set environment file and service based on manual input
-            ENV_FILE="${{ github.event.inputs.environment }}"
-            SERVICE="${{ github.event.inputs.service }}"
-            BRANCH="${{ github.ref_name }}"
-
-            # Map service to port
-            if [ "$SERVICE" = "fasthelp" ]; then
-              PORT=4001
-              CONTAINER_NAME="mastra-test-fasthelp"
-            else
-              PORT=4000
-              CONTAINER_NAME="mastra-test"
-            fi
 
             # Create image name with branch and service
             IMAGE_NAME="mastra-test-${BRANCH}-${SERVICE}"
@@ -259,34 +259,15 @@ jobs:
             # Deploy container with environment-specific configuration
             echo "🚀 Deploying service: $SERVICE with environment: $ENV_FILE on port: $PORT"
 
-            if [ "$ENV_FILE" = "production" ]; then
-              echo "🔒 Using production deployment (environment variables only)"
-              # Production: Use environment variables directly (no env files)
-              sudo docker run -d \
-                --name $CONTAINER_NAME \
-                --network mastra-test-network \
-                --restart unless-stopped \
-                -p $PORT:$PORT \
-                -e NODE_ENV=production \
-                -e PORT=$PORT \
-                -e DATABASE_URL="postgresql://${{ vars.POSTGRES_USER }}:${{ secrets.POSTGRES_PASSWORD }}@postgres-pgvector:5432/${{ vars.POSTGRES_DB }}" \
-                -e AGENT_DATABASE_URL="postgresql://${{ vars.POSTGRES_USER }}:${{ secrets.POSTGRES_PASSWORD }}@postgres-pgvector:5432/${{ vars.AGENT_POSTGRES_DB }}" \
-                $REGISTRY_IP:5000/$IMAGE_NAME:latest
-            else
-              echo "🧪 Using development deployment (env file + overrides)"
-              # Development: Use env file with production overrides
-              sudo docker run -d \
-                --name $CONTAINER_NAME \
-                --network mastra-test-network \
-                --restart unless-stopped \
-                -p $PORT:$PORT \
-                --env-file "/opt/mastra-test/.env.$ENV_FILE" \
-                -e NODE_ENV=production \
-                -e PORT=$PORT \
-                -e DATABASE_URL="postgresql://${{ vars.POSTGRES_USER }}:${{ secrets.POSTGRES_PASSWORD }}@postgres-pgvector:5432/${{ vars.POSTGRES_DB }}" \
-                -e AGENT_DATABASE_URL="postgresql://${{ vars.POSTGRES_USER }}:${{ secrets.POSTGRES_PASSWORD }}@postgres-pgvector:5432/${{ vars.AGENT_POSTGRES_DB }}" \
-                $REGISTRY_IP:5000/$IMAGE_NAME:latest
-            fi
+            # Deploy with env file (NODE_ENV already set in Dockerfile)
+            sudo docker run -d \
+              --name $CONTAINER_NAME \
+              --network mastra-test-network \
+              --restart unless-stopped \
+              -p $PORT:$PORT \
+              --env-file "/opt/mastra-test/.env.$ENV_FILE" \
+              -e PORT=$PORT \
+              $REGISTRY_IP:5000/$IMAGE_NAME:latest
 
             # Debug: Check safe environment variables in running container
             echo "🔍 Safe environment variables in container:"
@@ -303,7 +284,7 @@ jobs:
           ssh ${{ env.LIGHTSAIL_USER }}@${{ env.LIGHTSAIL_HOST }} << 'EOF'
             echo "🔍 Verifying deployment..."
 
-            # Map service to port and container name
+            # Map service to port and container name (same database for all services)
             SERVICE="${{ github.event.inputs.service }}"
             if [ "$SERVICE" = "fasthelp" ]; then
               PORT=4001

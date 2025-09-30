@@ -15,14 +15,14 @@ RUN corepack enable pnpm
 # Copy dependency files
 COPY package.json pnpm-lock.yaml* ./
 
-# Install dependencies
+# Install dependencies with lockfile verification
 # For private git repos, you may need to build with --build-arg or secrets
 RUN --mount=type=secret,id=github_token \
     if [ -f /run/secrets/github_token ]; then \
         git config --global url."https://oauth2:$(cat /run/secrets/github_token)@github.com/".insteadOf "https://github.com/"; \
     fi && \
     pnpm config set auto-install-peers false && \
-    pnpm install --no-frozen-lockfile
+    pnpm install --frozen-lockfile
 
 # Rebuild the source code only when needed
 FROM base AS builder
@@ -33,11 +33,20 @@ COPY . .
 # Install pnpm in builder stage
 RUN corepack enable pnpm
 
+# NODE_ENV should always be production for optimized builds
+ENV NODE_ENV=production
+
 # Generate Prisma client
 RUN pnpm prisma:generate
 
-# Build the application
-RUN pnpm build
+# Build the application with env vars from .env file
+# Load .env and export variables before building
+RUN set -a; \
+    if [ -f .env ]; then \
+      . ./.env; \
+    fi; \
+    set +a; \
+    pnpm build
 
 # Production image, copy all the files and run mastra
 FROM base AS runner
@@ -67,10 +76,12 @@ COPY --from=builder --chown=mastra:nodejs /app/.mastra/output ./.mastra/output
 
 USER mastra
 
-EXPOSE 4000
-
-ENV PORT=4000
+# Port configuration - can be overridden at build time or runtime
+ARG PORT=4000
+ENV PORT=${PORT}
 ENV HOSTNAME="0.0.0.0"
+
+EXPOSE ${PORT}
 
 # Health check - use 127.0.0.1 instead of localhost for better container compatibility
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
