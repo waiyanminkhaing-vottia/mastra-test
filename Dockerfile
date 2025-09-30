@@ -56,10 +56,13 @@ ENV NODE_ENV=production
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 mastra
 
-# Copy built application from .mastra/output
-COPY --from=builder --chown=mastra:nodejs /app/.mastra/output ./.mastra/output
+# Copy built application from .mastra/output (includes node_modules installed by mastra build)
+COPY --from=builder --chown=mastra:nodejs /app/.mastra/output ./output
 
 USER mastra
+
+# Set working directory to output for runtime
+WORKDIR /app/output
 
 EXPOSE 4000
 
@@ -70,5 +73,5 @@ ENV HOSTNAME="0.0.0.0"
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
   CMD curl -f http://localhost:4000/health || exit 1
 
-# Run the built application
-CMD ["node", "--import=./.mastra/output/instrumentation.mjs", ".mastra/output/index.mjs"]
+# Run the built application from the output directory
+CMD ["node", "--import=./instrumentation.mjs", "./index.mjs"]
