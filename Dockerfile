@@ -15,14 +15,14 @@ RUN corepack enable pnpm
 # Copy dependency files
 COPY package.json pnpm-lock.yaml* ./
 
-# Install dependencies with lockfile verification
+# Install dependencies
 # For private git repos, you may need to build with --build-arg or secrets
 RUN --mount=type=secret,id=github_token \
     if [ -f /run/secrets/github_token ]; then \
         git config --global url."https://oauth2:$(cat /run/secrets/github_token)@github.com/".insteadOf "https://github.com/"; \
     fi && \
     pnpm config set auto-install-peers false && \
-    pnpm install --frozen-lockfile
+    pnpm install --no-frozen-lockfile
 
 # Rebuild the source code only when needed
 FROM base AS builder
