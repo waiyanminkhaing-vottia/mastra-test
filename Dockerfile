@@ -59,6 +59,10 @@ RUN adduser --system --uid 1001 mastra
 # Copy built application from .mastra/output (includes node_modules installed by mastra build)
 COPY --from=builder --chown=mastra:nodejs /app/.mastra/output ./output
 
+# Copy Prisma generated client from builder stage
+COPY --from=builder --chown=mastra:nodejs /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=builder --chown=mastra:nodejs /app/node_modules/@prisma ./node_modules/@prisma
+
 USER mastra
 
 # Set working directory to output for runtime
