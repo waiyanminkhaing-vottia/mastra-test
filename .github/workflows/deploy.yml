@@ -325,7 +325,7 @@ jobs:
             # Set environment file based on manual input
             ENV_FILE="${{ github.event.inputs.environment }}"
 
-            HEALTH_URL="http://localhost:$PORT/health"
+            HEALTH_URL="http://localhost:$PORT/api/health"
             echo "🔍 Using health check URL: $HEALTH_URL"
 
             # Check container status
