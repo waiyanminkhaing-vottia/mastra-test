@@ -269,6 +269,7 @@ jobs:
               -e PORT=$PORT \
               -e DATABASE_URL="postgresql://${{ vars.POSTGRES_USER }}:${{ secrets.POSTGRES_PASSWORD }}@postgres-pgvector:5432/${{ vars.POSTGRES_DB }}" \
               -e AGENT_DATABASE_URL="postgresql://${{ vars.POSTGRES_USER }}:${{ secrets.POSTGRES_PASSWORD }}@postgres-pgvector:5432/${{ vars.AGENT_POSTGRES_DB }}" \
+              -e OPENAI_API_KEY="${{ secrets.OPENAI_API_KEY }}" \
               $REGISTRY_IP:5000/$IMAGE_NAME:latest
 
             # Debug: Check safe environment variables in running container
@@ -356,6 +357,7 @@ jobs:
                   -e PORT=$PORT \
                   -e DATABASE_URL="postgresql://${{ vars.POSTGRES_USER }}:${{ secrets.POSTGRES_PASSWORD }}@postgres-pgvector:5432/${{ vars.POSTGRES_DB }}" \
                   -e AGENT_DATABASE_URL="postgresql://${{ vars.POSTGRES_USER }}:${{ secrets.POSTGRES_PASSWORD }}@postgres-pgvector:5432/${{ vars.AGENT_POSTGRES_DB }}" \
+                  -e OPENAI_API_KEY="${{ secrets.OPENAI_API_KEY }}" \
                   $CURRENT_IMAGE
                 echo "🔄 Rollback completed"
               else
