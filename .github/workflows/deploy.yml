@@ -288,6 +288,9 @@ jobs:
 
             # Map service to port and container name (same database for all services)
             SERVICE="${{ github.event.inputs.service }}"
+            ENV_FILE="${{ github.event.inputs.environment }}"
+            BRANCH="${{ github.ref_name }}"
+
             if [ "$SERVICE" = "fasthelp" ]; then
               PORT=4001
               CONTAINER_NAME="mastra-test-fasthelp"
@@ -296,11 +299,70 @@ jobs:
               CONTAINER_NAME="mastra-test"
             fi
 
+            # Create image name with branch and service
+            IMAGE_NAME="mastra-test-${BRANCH}-${SERVICE}"
+
+            # Get registry IP
+            REGISTRY_IP=$(sudo docker inspect local-registry --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}')
+
+            echo "Verifying service: $SERVICE on port: $PORT"
+
             echo "Checking container status..."
             sudo docker ps | grep $CONTAINER_NAME
 
             echo "Checking container logs..."
             sudo docker logs $CONTAINER_NAME --tail=20
 
-            echo "✅ Deployment completed successfully (health check skipped)"
+            echo "Waiting for application to be ready..."
+            HEALTH_CHECK_PASSED=false
+
+            HEALTH_URL="http://localhost:$PORT/api/health"
+            echo "🔍 Using health check URL: $HEALTH_URL"
+
+            # Check container status
+            echo "🔍 Container status:"
+            sudo docker ps | grep $CONTAINER_NAME || echo "Container not found"
+
+            # Wait for application to be ready with the correct health endpoint
+            for i in {1..30}; do
+              if curl -sf "$HEALTH_URL" >/dev/null 2>&1; then
+                echo "✅ Application health check passed"
+                HEALTH_CHECK_PASSED=true
+                break
+              else
+                if [ $i -eq 1 ]; then
+                  echo "⏳ Waiting for application to start..."
+                elif [ $((i % 10)) -eq 0 ]; then
+                  echo "⏳ Still waiting for application... ($i/30)"
+                fi
+                sleep 2
+              fi
+            done
+
+            # Rollback if health check failed
+            if [ "$HEALTH_CHECK_PASSED" = "false" ]; then
+              echo "❌ Health check failed. Rolling back..."
+              sudo docker stop $CONTAINER_NAME 2>/dev/null || true
+              sudo docker rm $CONTAINER_NAME 2>/dev/null || true
+
+              if [ "$CURRENT_IMAGE" != "none" ] && [ -n "$CURRENT_IMAGE" ]; then
+                echo "🔄 Restoring previous container with image: $CURRENT_IMAGE"
+                sudo docker run -d \
+                  --name $CONTAINER_NAME \
+                  --network mastra-test-network \
+                  --restart unless-stopped \
+                  -p $PORT:$PORT \
+                  --env-file "/opt/mastra-test/.env.$ENV_FILE" \
+                  -e PORT=$PORT \
+                  -e DATABASE_URL="postgresql://${{ vars.POSTGRES_USER }}:${{ secrets.POSTGRES_PASSWORD }}@postgres-pgvector:5432/${{ vars.POSTGRES_DB }}" \
+                  -e AGENT_DATABASE_URL="postgresql://${{ vars.POSTGRES_USER }}:${{ secrets.POSTGRES_PASSWORD }}@postgres-pgvector:5432/${{ vars.AGENT_POSTGRES_DB }}" \
+                  $CURRENT_IMAGE
+                echo "🔄 Rollback completed"
+              else
+                echo "❌ No previous image available for rollback (CURRENT_IMAGE: '$CURRENT_IMAGE')"
+              fi
+              exit 1
+            fi
+
+            echo "✅ Deployment verification completed successfully"
           EOF
