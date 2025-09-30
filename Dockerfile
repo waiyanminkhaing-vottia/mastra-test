@@ -56,6 +56,9 @@ ENV NODE_ENV=production
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 mastra
 
+# Copy node_modules from builder (includes Prisma client)
+COPY --from=builder --chown=mastra:nodejs /app/node_modules ./node_modules
+
 # Copy source files needed for Prisma
 COPY --from=builder --chown=mastra:nodejs /app/src ./src
 
