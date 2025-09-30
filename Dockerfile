@@ -56,13 +56,8 @@ ENV NODE_ENV=production
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 mastra
 
-# Copy built application and dependencies
-COPY --from=builder --chown=mastra:nodejs /app/dist ./dist
-COPY --from=builder --chown=mastra:nodejs /app/node_modules ./node_modules
-COPY --from=builder --chown=mastra:nodejs /app/package.json ./package.json
-
-# Copy any other necessary files (configs, etc.)
-COPY --chown=mastra:nodejs .env.example ./
+# Copy built application from .mastra/output
+COPY --from=builder --chown=mastra:nodejs /app/.mastra/output ./.mastra/output
 
 USER mastra
 
@@ -75,5 +70,5 @@ ENV HOSTNAME="0.0.0.0"
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
   CMD curl -f http://localhost:4000/health || exit 1
 
-# Use mastra dev for development, but you might want to change this for production
-CMD ["pnpm", "dev"]
+# Run the built application
+CMD ["node", "--import=./.mastra/output/instrumentation.mjs", ".mastra/output/index.mjs"]
