@@ -316,7 +316,7 @@ jobs:
             echo "Waiting for application to be ready..."
             HEALTH_CHECK_PASSED=false
 
-            HEALTH_URL="http://localhost:$PORT/api/health"
+            HEALTH_URL="http://localhost:$PORT/health"
             echo "🔍 Using health check URL: $HEALTH_URL"
 
             # Check container status
