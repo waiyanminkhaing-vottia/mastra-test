@@ -1,6 +1,7 @@
 # Dependencies
 node_modules/
 pnpm-lock.yaml*
+.pnpm-store/
 
 # Production build
 dist/
@@ -11,21 +12,38 @@ output.txt
 .env
 .env.local
 .env.development
+.env.test
+.env.production
 .env.*.local
+!.env.example
 
-# IDE
+# IDE and Editor files
 .idea/
+.vscode/
+*.swp
+*.swo
+*.sublime-*
 
 # OS
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db
 
 # Logs
 *.log
 logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
 
 # Coverage
 coverage/
+.nyc_output
 
 # Database
 *.db
@@ -34,6 +52,14 @@ coverage/
 # Temporary files
 *.tmp
 *.temp
+.tmp/
+.temp/
+tmp/
+
+# Cache directories
+.cache/
+.parcel-cache/
+.eslintcache
 
 # Mastra
 .mastra/
@@ -46,6 +72,21 @@ mastra-cache/
 mastra.lock
 mastra-lock.json
 .mastra.lock
+
+# Security files
+*.pem
+*.key
+*.p12
+*.pfx
+secrets/
+.secrets/
+
+# Docker development files
+docker-compose.override.yml
+docker-compose.dev.yml
+
+# TypeScript
+*.tsbuildinfo
 
 # Project specific
 prompts/

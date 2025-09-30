@@ -3,7 +3,6 @@ import { Agent } from '@mastra/core';
 import { createChangeAwareCache } from '../lib/change-aware-cache';
 import { logger } from '../lib/logger';
 import { sharedMemory } from '../lib/memory';
-import { getZapierTools } from '../mcp/zapier-client';
 import { hasAgentConfigChanged } from '../services/agent-change-detector';
 import { type AgentConfig, getAgentConfig } from '../services/agent-config';
 import { generateCustomerId } from '../tools/generateCustomerId';
@@ -27,7 +26,6 @@ const agentConfigCache = createChangeAwareCache<AgentConfig>(
 const createMainAgent = async () => {
   try {
     const config = await agentConfigCache.get(agentName);
-    const zapierTools = await getZapierTools();
 
     return new Agent({
       name: config.name,
@@ -41,11 +39,14 @@ const createMainAgent = async () => {
         return latestConfig.model;
       },
       memory: sharedMemory,
-      tools: {
-        getCurrentTime,
-        generateCustomerId,
-        generateReservationId,
-        ...zapierTools,
+      tools: async () => {
+        const latestConfig = await agentConfigCache.get(agentName);
+        return {
+          getCurrentTime,
+          generateCustomerId,
+          generateReservationId,
+          ...latestConfig.tools, // Include MCP tools from agent config
+        };
       },
     });
   } catch (error) {

@@ -7,10 +7,24 @@ interface AgentChangeInfo {
   lastUpdated: Date;
   modelUpdated: Date;
   promptUpdated: Date;
+  mcpToolsHash: string;
 }
 
 // In-memory store for last known update times
 const lastKnownUpdates = new Map<string, AgentChangeInfo>();
+
+/**
+ * Simple hash function for strings
+ */
+function createHash(str: string): string {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = (hash << 5) - hash + char;
+    hash = hash & hash; // Convert to 32bit integer
+  }
+  return hash.toString();
+}
 
 /**
  * Check if agent configuration has changed since last check
@@ -40,26 +54,31 @@ export const hasAgentConfigChanged = async (
       return true;
     }
 
-    // Check if any timestamps have changed
+    // Check if any timestamps or MCP tools have changed
     const hasChanged =
       currentInfo.lastUpdated.getTime() !== lastKnown.lastUpdated.getTime() ||
       currentInfo.modelUpdated.getTime() !== lastKnown.modelUpdated.getTime() ||
-      currentInfo.promptUpdated.getTime() !== lastKnown.promptUpdated.getTime();
+      currentInfo.promptUpdated.getTime() !==
+        lastKnown.promptUpdated.getTime() ||
+      currentInfo.mcpToolsHash !== lastKnown.mcpToolsHash;
 
     if (hasChanged) {
       logger.info(`Agent config changed for '${agentName}':`, {
         agentUpdated: currentInfo.lastUpdated !== lastKnown.lastUpdated,
         modelUpdated: currentInfo.modelUpdated !== lastKnown.modelUpdated,
         promptUpdated: currentInfo.promptUpdated !== lastKnown.promptUpdated,
+        mcpToolsUpdated: currentInfo.mcpToolsHash !== lastKnown.mcpToolsHash,
         currentTimestamps: {
           agent: currentInfo.lastUpdated,
           model: currentInfo.modelUpdated,
           prompt: currentInfo.promptUpdated,
+          mcpToolsHash: currentInfo.mcpToolsHash,
         },
         previousTimestamps: {
           agent: lastKnown.lastUpdated,
           model: lastKnown.modelUpdated,
           prompt: lastKnown.promptUpdated,
+          mcpToolsHash: lastKnown.mcpToolsHash,
         },
       });
 
@@ -97,12 +116,23 @@ const getAgentChangeInfo = async (
     return null;
   }
 
+  // Get agent's MCP tool assignments to create a hash
+  const agentMcpTools = (await prisma.agentMcpTool.findMany({
+    where: { agentId: agent.id },
+  })) as Array<{ mcpId: string; toolName: string }>;
+
+  // Create a hash from the MCP tools for change detection
+  const mcpToolsHash = createHash(
+    agentMcpTools.map((amt) => `${amt.mcpId}:${amt.toolName}`).join('|')
+  );
+
   return {
     agentId: agent.id,
     agentName: agent.name,
     lastUpdated: agent.updatedAt,
     modelUpdated: agent.model.updatedAt,
     promptUpdated: agent.prompt.updatedAt,
+    mcpToolsHash,
   };
 };
 

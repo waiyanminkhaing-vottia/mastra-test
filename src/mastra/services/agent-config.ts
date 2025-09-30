@@ -32,6 +32,7 @@ export interface AgentConfig {
   description: string | null;
   model: MastraLanguageModel;
   instruction: string;
+  tools?: Record<string, unknown>;
 }
 
 export const getAgentConfig = async (
@@ -80,12 +81,16 @@ export const getAgentConfig = async (
       throw new Error(`No prompt version found for agent ${agentName}`);
     }
 
+    // Get MCP tools for this agent (cached with agent config)
+    const tools = await getAgentMcpTools(agent.id);
+
     return {
       id: agent.id,
       name: agent.name,
       description: agent.description,
       model: createModelInstance(agent.model.provider, agent.model.name),
       instruction: prompt.content,
+      tools,
     };
   } catch (error) {
     logError(
@@ -95,3 +100,60 @@ export const getAgentConfig = async (
     throw error;
   }
 };
+
+/**
+ * Get MCP tools for a specific agent
+ * This function is called as part of agent config loading and will be cached with the agent config
+ */
+async function getAgentMcpTools(
+  agentId: string
+): Promise<Record<string, unknown>> {
+  try {
+    // Get agent's MCP tool assignments
+    const agentMcpTools = (await prisma.agentMcpTool.findMany({
+      where: { agentId },
+    })) as Array<{ mcpId: string; toolName: string }>;
+
+    if (agentMcpTools.length === 0) {
+      return {};
+    }
+
+    // Import mcpManager here to avoid circular dependency
+    const { mcpManager } = await import('./mcp-config');
+
+    const tools: Record<string, unknown> = {};
+    const processedMcps = new Set<string>();
+
+    // Load tools from each assigned MCP server
+    for (const agentMcpTool of agentMcpTools) {
+      // Only fetch tools from each MCP server once
+      if (!processedMcps.has(agentMcpTool.mcpId)) {
+        const mcpTools = await mcpManager.getToolsByServerId(
+          agentMcpTool.mcpId
+        );
+
+        // Get all tools from this MCP server that are assigned to this agent
+        const agentToolsFromThisMcp = agentMcpTools
+          .filter((amt) => amt.mcpId === agentMcpTool.mcpId)
+          .map((amt) => amt.toolName);
+
+        // Include only the specific tools assigned to this agent
+        for (const toolName of agentToolsFromThisMcp) {
+          if (mcpTools[toolName]) {
+            tools[toolName] = mcpTools[toolName];
+          }
+        }
+
+        processedMcps.add(agentMcpTool.mcpId);
+      }
+    }
+
+    return tools;
+  } catch (error) {
+    logError(
+      `Failed to load MCP tools for agent ${agentId}`,
+      error instanceof Error ? error : new Error(String(error))
+    );
+    return {};
+  }
+}
