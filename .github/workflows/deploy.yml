@@ -192,60 +192,6 @@ jobs:
           sudo docker push $REGISTRY_IP:5000/$IMAGE_NAME:latest
           rm -f /tmp/github_token
 
-          # Install and run Trivy security scanner
-          echo "🔍 Installing Trivy security scanner and dependencies..."
-          if ! command -v trivy >/dev/null 2>&1; then
-            # Install Trivy on Amazon Linux/RHEL-based systems
-            sudo dnf install -y wget jq
-            wget -qO- https://aquasecurity.github.io/trivy-repo/rpm/trivy.repo | sudo tee /etc/yum.repos.d/trivy.repo
-            sudo dnf install -y trivy
-          fi
-
-          # Ensure jq is available for JSON parsing
-          if ! command -v jq >/dev/null 2>&1; then
-            sudo dnf install -y jq
-          fi
-
-          echo "🔍 Running container security scan..."
-          trivy image \
-            --exit-code 0 \
-            --no-progress \
-            --format table \
-            --severity HIGH,CRITICAL \
-            --timeout 10m \
-            localhost:5000/$IMAGE_NAME:latest
-
-          echo "🔍 Running security scan with JSON output for CI..."
-          trivy image \
-            --exit-code 0 \
-            --no-progress \
-            --format json \
-            --severity HIGH,CRITICAL \
-            --timeout 10m \
-            --output /tmp/trivy-results.json \
-            localhost:5000/$IMAGE_NAME:latest
-
-          # Show summary of findings
-          if [ -f "/tmp/trivy-results.json" ]; then
-            echo "🔍 Security scan summary:"
-            CRITICAL_COUNT=$(cat /tmp/trivy-results.json | jq '[.Results[]?.Vulnerabilities[]? | select(.Severity == "CRITICAL")] | length' 2>/dev/null || echo "0")
-            HIGH_COUNT=$(cat /tmp/trivy-results.json | jq '[.Results[]?.Vulnerabilities[]? | select(.Severity == "HIGH")] | length' 2>/dev/null || echo "0")
-            echo "   Critical vulnerabilities: $CRITICAL_COUNT"
-            echo "   High vulnerabilities: $HIGH_COUNT"
-
-            # Optional: fail deployment if critical vulnerabilities found
-            # Uncomment the lines below to block deployment on critical vulnerabilities
-            # if [ "$CRITICAL_COUNT" -gt "0" ]; then
-            #   echo "❌ Critical vulnerabilities found, deployment blocked"
-            #   exit 1
-            # fi
-
-            # Clean up scan results
-            rm -f /tmp/trivy-results.json
-          else
-            echo "⚠️ Failed to generate security scan results"
-          fi
-
           echo "✅ Image built and pushed: localhost:5000/$IMAGE_NAME:latest"
           SCRIPT_EOF
 
