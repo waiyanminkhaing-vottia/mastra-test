@@ -72,9 +72,9 @@ EXPOSE 4000
 ENV PORT=4000
 ENV HOSTNAME="0.0.0.0"
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-  CMD curl -f http://localhost:4000/api/health || exit 1
+# Health check - use 127.0.0.1 instead of localhost for better container compatibility
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+  CMD curl -f http://127.0.0.1:${PORT:-4000}/api/health || exit 1
 
 # Run the built application (mastra build bundles everything including Prisma)
 CMD ["node", "--import=./.mastra/output/instrumentation.mjs", ".mastra/output/index.mjs"]

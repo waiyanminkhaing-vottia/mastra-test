@@ -332,22 +332,31 @@ jobs:
             echo "🔍 Container status:"
             sudo docker ps | grep $CONTAINER_NAME || echo "Container not found"
 
-            # Wait for application to be ready with the correct health endpoint (increased to 60 attempts = 2 minutes)
+            # Wait for application to be ready - check Docker health status instead of direct curl
             for i in {1..60}; do
-              if curl -sf "$HEALTH_URL" >/dev/null 2>&1; then
-                echo "✅ Application health check passed"
+              HEALTH_STATUS=$(sudo docker inspect --format='{{.State.Health.Status}}' $CONTAINER_NAME 2>/dev/null || echo "none")
+
+              if [ "$HEALTH_STATUS" = "healthy" ]; then
+                echo "✅ Application health check passed (Docker reports: healthy)"
                 HEALTH_CHECK_PASSED=true
                 break
-              else
-                if [ $i -eq 1 ]; then
-                  echo "⏳ Waiting for application to start..."
-                elif [ $((i % 10)) -eq 0 ]; then
-                  echo "⏳ Still waiting for application... ($i/60)"
-                  echo "📋 Recent logs:"
-                  sudo docker logs $CONTAINER_NAME --tail=10
+              elif [ "$HEALTH_STATUS" = "none" ]; then
+                # No health check configured, fallback to direct curl
+                if curl -sf "$HEALTH_URL" >/dev/null 2>&1; then
+                  echo "✅ Application health check passed (direct curl)"
+                  HEALTH_CHECK_PASSED=true
+                  break
                 fi
-                sleep 2
               fi
+
+              if [ $i -eq 1 ]; then
+                echo "⏳ Waiting for application to start... (Health: $HEALTH_STATUS)"
+              elif [ $((i % 10)) -eq 0 ]; then
+                echo "⏳ Still waiting for application... ($i/60) (Health: $HEALTH_STATUS)"
+                echo "📋 Recent logs:"
+                sudo docker logs $CONTAINER_NAME --tail=10
+              fi
+              sleep 2
             done
 
             # Rollback if health check failed
