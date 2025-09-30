@@ -77,7 +77,7 @@ COPY --from=builder --chown=mastra:nodejs /app/.mastra/output ./.mastra/output
 USER mastra
 
 # Port configuration - can be overridden at build time or runtime
-ARG PORT=4000
+ARG PORT=4001
 ENV PORT=${PORT}
 ENV HOSTNAME="0.0.0.0"
 
@@ -85,7 +85,7 @@ EXPOSE ${PORT}
 
 # Health check - use 127.0.0.1 instead of localhost for better container compatibility
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-  CMD curl -f http://127.0.0.1:${PORT:-4000}/api/health || exit 1
+  CMD curl -f http://127.0.0.1:${PORT:-4001}/health || exit 1
 
 # Run the built application (mastra build bundles everything including Prisma)
 CMD ["node", "--import=./.mastra/output/instrumentation.mjs", ".mastra/output/index.mjs"]

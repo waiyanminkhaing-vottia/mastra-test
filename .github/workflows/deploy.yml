@@ -170,9 +170,9 @@ jobs:
 
           # Set port based on service
           if [ "$SERVICE" = "fasthelp" ]; then
-            PORT=4001
+            PORT=4002
           else
-            PORT=4000
+            PORT=4001
           fi
 
           # Build image using regular docker build with PORT argument
@@ -223,10 +223,10 @@ jobs:
 
             # Map service to port and container name (same database for all services)
             if [ "$SERVICE" = "fasthelp" ]; then
-              PORT=4001
+              PORT=4002
               CONTAINER_NAME="mastra-test-fasthelp"
             else
-              PORT=4000
+              PORT=4001
               CONTAINER_NAME="mastra-test"
             fi
 
@@ -292,10 +292,10 @@ jobs:
             BRANCH="${{ github.ref_name }}"
 
             if [ "$SERVICE" = "fasthelp" ]; then
-              PORT=4001
+              PORT=4002
               CONTAINER_NAME="mastra-test-fasthelp"
             else
-              PORT=4000
+              PORT=4001
               CONTAINER_NAME="mastra-test"
             fi
 
