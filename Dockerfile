@@ -56,12 +56,11 @@ ENV NODE_ENV=production
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 mastra
 
-# Copy entire node_modules from builder to make Prisma client available
-# Must be copied before switching user to maintain proper permissions
-COPY --from=builder --chown=mastra:nodejs /app/node_modules ./node_modules
+# Copy source files needed for Prisma
+COPY --from=builder --chown=mastra:nodejs /app/src ./src
 
-# Copy built application from .mastra/output (includes node_modules installed by mastra build)
-COPY --from=builder --chown=mastra:nodejs /app/.mastra/output ./output
+# Copy built application from .mastra/output
+COPY --from=builder --chown=mastra:nodejs /app/.mastra/output ./.mastra/output
 
 USER mastra
 
@@ -74,5 +73,5 @@ ENV HOSTNAME="0.0.0.0"
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
   CMD curl -f http://localhost:4000/health || exit 1
 
-# Run the built application from /app directory so Prisma can find node_modules
-CMD ["node", "--import=./output/instrumentation.mjs", "./output/index.mjs"]
+# Run the built application (mastra build bundles everything including Prisma)
+CMD ["node", "--import=./.mastra/output/instrumentation.mjs", ".mastra/output/index.mjs"]
