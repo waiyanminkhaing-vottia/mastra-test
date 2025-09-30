@@ -283,14 +283,12 @@ jobs:
             SERVICE="${{ github.event.inputs.service }}"
             BRANCH="${{ github.ref_name }}"
 
-            # Map service to port and base path
+            # Map service to port
             if [ "$SERVICE" = "fasthelp" ]; then
               PORT=4001
-              BASE_PATH="/fasthelp"
               CONTAINER_NAME="mastra-test-fasthelp"
             else
               PORT=4000
-              BASE_PATH=""
               CONTAINER_NAME="mastra-test"
             fi
 
@@ -301,7 +299,6 @@ jobs:
             echo "Using environment: $ENV_FILE"
             echo "Using branch: $BRANCH"
             echo "Using port: $PORT"
-            echo "Using base path: $BASE_PATH"
             echo "Container name: $CONTAINER_NAME"
             echo "Image name: $IMAGE_NAME"
 
@@ -326,7 +323,6 @@ jobs:
                 -p $PORT:$PORT \
                 -e NODE_ENV=production \
                 -e PORT=$PORT \
-                -e BASE_PATH="$BASE_PATH" \
                 -e DATABASE_URL="postgresql://${{ vars.POSTGRES_USER }}:${{ secrets.POSTGRES_PASSWORD }}@postgres-pgvector:5432/${{ vars.POSTGRES_DB }}" \
                 $REGISTRY_IP:5000/$IMAGE_NAME:latest
             else
@@ -340,7 +336,6 @@ jobs:
                 --env-file "/opt/mastra-test/.env.$ENV_FILE" \
                 -e NODE_ENV=production \
                 -e PORT=$PORT \
-                -e BASE_PATH="$BASE_PATH" \
                 -e DATABASE_URL="postgresql://${{ vars.POSTGRES_USER }}:${{ secrets.POSTGRES_PASSWORD }}@postgres-pgvector:5432/${{ vars.POSTGRES_DB }}" \
                 $REGISTRY_IP:5000/$IMAGE_NAME:latest
             fi
@@ -360,15 +355,13 @@ jobs:
           ssh ${{ env.LIGHTSAIL_USER }}@${{ env.LIGHTSAIL_HOST }} << 'EOF'
             echo "🔍 Verifying deployment..."
 
-            # Map service to port, base path and container name
+            # Map service to port and container name
             SERVICE="${{ github.event.inputs.service }}"
             if [ "$SERVICE" = "fasthelp" ]; then
               PORT=4001
-              BASE_PATH="/fasthelp"
               CONTAINER_NAME="mastra-test-fasthelp"
             else
               PORT=4000
-              BASE_PATH=""
               CONTAINER_NAME="mastra-test"
             fi
 
@@ -384,7 +377,7 @@ jobs:
             # Set environment file based on manual input
             ENV_FILE="${{ github.event.inputs.environment }}"
 
-            HEALTH_URL="http://localhost:$PORT${BASE_PATH}/health"
+            HEALTH_URL="http://localhost:$PORT/health"
             echo "🔍 Using health check URL: $HEALTH_URL"
 
             # Check container status
@@ -423,7 +416,6 @@ jobs:
                   --env-file "/opt/mastra-test/.env.$ENV_FILE" \
                   -e NODE_ENV=production \
                   -e PORT=$PORT \
-                  -e BASE_PATH="$BASE_PATH" \
                   -e DATABASE_URL="postgresql://${{ vars.POSTGRES_USER }}:${{ secrets.POSTGRES_PASSWORD }}@postgres-pgvector:5432/${{ vars.POSTGRES_DB }}" \
                   $CURRENT_IMAGE
                 echo "🔄 Rollback completed"

@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "mastra dev --env .env.local",
+    "dev": "PORT=4000 mastra dev --env .env.local",
     "build": "mastra build",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
