@@ -59,9 +59,9 @@ RUN adduser --system --uid 1001 mastra
 # Copy built application from .mastra/output (includes node_modules installed by mastra build)
 COPY --from=builder --chown=mastra:nodejs /app/.mastra/output ./output
 
-# Copy Prisma generated client from builder stage
-COPY --from=builder --chown=mastra:nodejs /app/node_modules/.prisma ./node_modules/.prisma
-COPY --from=builder --chown=mastra:nodejs /app/node_modules/@prisma ./node_modules/@prisma
+# Copy entire node_modules from builder to make Prisma client available
+# The bundled code references Prisma from /app/node_modules
+COPY --from=builder --chown=mastra:nodejs /app/node_modules ./node_modules
 
 USER mastra
 
