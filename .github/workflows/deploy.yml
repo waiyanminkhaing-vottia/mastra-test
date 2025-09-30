@@ -259,7 +259,7 @@ jobs:
             # Deploy container with environment-specific configuration
             echo "🚀 Deploying service: $SERVICE with environment: $ENV_FILE on port: $PORT"
 
-            # Deploy with env file (NODE_ENV already set in Dockerfile)
+            # Deploy with env file and database URLs from GitHub secrets
             sudo docker run -d \
               --name $CONTAINER_NAME \
               --network mastra-test-network \
@@ -267,6 +267,8 @@ jobs:
               -p $PORT:$PORT \
               --env-file "/opt/mastra-test/.env.$ENV_FILE" \
               -e PORT=$PORT \
+              -e DATABASE_URL="postgresql://${{ vars.POSTGRES_USER }}:${{ secrets.POSTGRES_PASSWORD }}@postgres-pgvector:5432/${{ vars.POSTGRES_DB }}" \
+              -e AGENT_DATABASE_URL="postgresql://${{ vars.POSTGRES_USER }}:${{ secrets.POSTGRES_PASSWORD }}@postgres-pgvector:5432/${{ vars.AGENT_POSTGRES_DB }}" \
               $REGISTRY_IP:5000/$IMAGE_NAME:latest
 
             # Debug: Check safe environment variables in running container
