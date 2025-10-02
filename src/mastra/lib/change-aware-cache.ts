@@ -10,8 +10,6 @@ interface ChangeAwareCacheOptions {
   changeDetector: (key: string) => Promise<boolean>;
   /** Cache name for logging */
   cacheName?: string;
-  /** Enable logging */
-  enableLogging?: boolean;
 }
 
 /**
@@ -21,7 +19,6 @@ export class ChangeAwareCache<T> {
   private dataCache: CacheManager<T>;
   private changeCheckCache: CacheManager<boolean>;
   private changeDetector: (key: string) => Promise<boolean>;
-  private enableLogging: boolean;
   private cacheName: string;
 
   constructor(
@@ -33,48 +30,38 @@ export class ChangeAwareCache<T> {
       dataCacheTtl = 3600, // Data cache lasts 1 hour (until change detected)
       changeDetector,
       cacheName = 'ChangeAwareCache',
-      enableLogging = true,
     } = options;
 
     this.changeDetector = changeDetector;
-    this.enableLogging = enableLogging;
     this.cacheName = cacheName;
 
     // Cache for actual data (long TTL, invalidated by changes)
     this.dataCache = createCacheManager<T>(
       async (key: string) => {
-        if (this.enableLogging) {
-          logger.info(
-            `${this.cacheName}: Fetching fresh data for key '${key}'`
-          );
-        }
+        logger.info(`${this.cacheName}: Fetching fresh data for key '${key}'`);
         return this.dataFetcher(key);
       },
       {
         ttl: dataCacheTtl,
         cacheName: `${cacheName}:Data`,
-        enableLogging: this.enableLogging,
+        enableLogging: true,
       }
     );
 
     // Cache for change detection results (short TTL)
     this.changeCheckCache = createCacheManager<boolean>(
       async (key: string) => {
-        if (this.enableLogging) {
-          logger.debug(
-            `${this.cacheName}: Checking for changes for key '${key}'`
-          );
-        }
+        logger.debug(
+          `${this.cacheName}: Checking for changes for key '${key}'`
+        );
         const hasChanged = await this.changeDetector(key);
 
         if (hasChanged) {
           // Invalidate data cache when change detected
           this.dataCache.clear(key);
-          if (this.enableLogging) {
-            logger.info(
-              `${this.cacheName}: Change detected for key '${key}', invalidated data cache`
-            );
-          }
+          logger.info(
+            `${this.cacheName}: Change detected for key '${key}', invalidated data cache`
+          );
         }
 
         return hasChanged;
@@ -104,11 +91,9 @@ export class ChangeAwareCache<T> {
   invalidate(key: string): void {
     this.dataCache.clear(key);
     this.changeCheckCache.clear(key);
-    if (this.enableLogging) {
-      logger.info(
-        `${this.cacheName}: Manually invalidated cache for key '${key}'`
-      );
-    }
+    logger.info(
+      `${this.cacheName}: Manually invalidated cache for key '${key}'`
+    );
   }
 
   /**
@@ -117,9 +102,7 @@ export class ChangeAwareCache<T> {
   clearAll(): void {
     this.dataCache.clearAll();
     this.changeCheckCache.clearAll();
-    if (this.enableLogging) {
-      logger.info(`${this.cacheName}: Cleared all caches`);
-    }
+    logger.info(`${this.cacheName}: Cleared all caches`);
   }
 
   /**

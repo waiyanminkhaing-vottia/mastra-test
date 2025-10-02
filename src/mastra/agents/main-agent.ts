@@ -8,9 +8,6 @@ import {
   getAgentConfig,
   hasAgentListChanged,
 } from '../services/agent-config';
-import { generateCustomerId } from '../tools/generateCustomerId';
-import { generateReservationId } from '../tools/generateReservationId';
-import { getCurrentTime } from '../tools/getCurrentTime';
 
 const agentName = process.env.MAIN_AGENT_NAME ?? 'main-agent';
 
@@ -19,12 +16,11 @@ const agentConfigCache = createChangeAwareCache<AgentConfig>(
   async (name: string) => getAgentConfig(name),
   {
     checkInterval: parseInt(process.env.AGENT_CONFIG_CACHE_TTL ?? '10', 10), // Check for changes every 10 seconds
-    dataCacheTtl: 3600, // Cache data for 1 hour (until change detected)
+    dataCacheTtl: parseInt(process.env.AGENT_CONFIG_DATA_TTL ?? '86400', 10), // Safety net: force refresh after 24 hours
     changeDetector: async () =>
       // Use unified agent change detection for ALL agents
       hasAgentListChanged(),
     cacheName: `AgentConfigCache:${agentName}`,
-    enableLogging: process.env.NODE_ENV !== 'production',
   }
 );
 
@@ -46,12 +42,7 @@ const createMainAgent = async () => {
       memory: sharedMemory,
       tools: async () => {
         const latestConfig = await agentConfigCache.get(agentName);
-        return {
-          getCurrentTime,
-          generateCustomerId,
-          generateReservationId,
-          ...latestConfig.tools, // Include MCP tools from agent config
-        };
+        return latestConfig.tools ?? {};
       },
     });
   } catch (error) {

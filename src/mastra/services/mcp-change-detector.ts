@@ -74,8 +74,8 @@ const getMcpChangeInfo = async (): Promise<McpChangeInfo> => {
       .join('|')
   );
 
-  const latestUpdate =
-    mcpServers.length > 0 ? mcpServers[0].updatedAt : new Date(0);
+  const firstServer = mcpServers[0];
+  const latestUpdate = firstServer ? firstServer.updatedAt : new Date(0);
 
   return {
     mcpServersHash,

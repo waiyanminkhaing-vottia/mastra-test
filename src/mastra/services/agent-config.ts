@@ -1,7 +1,7 @@
 import { anthropic } from '@ai-sdk/anthropic';
 import { google } from '@ai-sdk/google';
 import { openai } from '@ai-sdk/openai';
-import { Agent, MastraLanguageModel } from '@mastra/core';
+import { Agent, MastraLanguageModel, type ToolAction } from '@mastra/core';
 import { Provider } from '@prisma/client';
 import { ollama } from 'ollama-ai-provider-v2';
 
@@ -9,6 +9,7 @@ import { createChangeAwareCache } from '../lib/change-aware-cache';
 import { logError, logger } from '../lib/logger';
 import { sharedMemory } from '../lib/memory';
 import { prisma } from '../lib/prisma';
+import { toolsMap } from '../tools';
 
 // ============================================================================
 // Types & Interfaces
@@ -24,7 +25,7 @@ export interface AgentConfig {
   description: string | null;
   model: MastraLanguageModel;
   instruction: string;
-  tools?: Record<string, unknown>;
+  tools?: Record<string, ToolAction>;
   subAgents?: Record<string, AgentConfig>;
 }
 
@@ -36,6 +37,17 @@ interface AgentListChangeInfo {
 // ============================================================================
 // Utility Functions
 // ============================================================================
+
+/**
+ * Get tenant ID from environment variable
+ */
+function getTenantId(): string {
+  const tenantId = process.env.TENANT_ID;
+  if (!tenantId) {
+    throw new Error('TENANT_ID environment variable is not set');
+  }
+  return tenantId;
+}
 
 /**
  * Create model instance based on provider
@@ -82,8 +94,14 @@ async function resolveLabelId(
   }
 
   if (process.env.DEMO && process.env.DEMO !== 'default') {
+    const tenantId = getTenantId();
     const label = await prisma.promptLabel.findUnique({
-      where: { name: process.env.DEMO },
+      where: {
+        name_tenantId: {
+          name: process.env.DEMO,
+          tenantId,
+        },
+      },
     });
     return label?.id ?? null;
   }
@@ -113,11 +131,53 @@ async function getPromptVersion(promptId: string, labelId: string | null) {
 }
 
 /**
+ * Get regular tools for a specific agent (from Tool/AgentTool models)
+ */
+async function getAgentTools(
+  agentId: string
+): Promise<Record<string, ToolAction>> {
+  try {
+    const agentTools = await prisma.agentTool.findMany({
+      where: { agentId },
+      include: {
+        tool: true,
+      },
+    });
+
+    if (agentTools.length === 0) {
+      return {};
+    }
+
+    const tools: Record<string, ToolAction> = {};
+
+    for (const agentTool of agentTools) {
+      const toolName = agentTool.tool.name;
+      // Get the actual tool implementation from the tools folder
+      if (toolsMap[toolName as keyof typeof toolsMap]) {
+        tools[toolName] = toolsMap[
+          toolName as keyof typeof toolsMap
+        ] as unknown as ToolAction;
+      } else {
+        logger.warn(`Tool ${toolName} not found in tools map`);
+      }
+    }
+
+    return tools;
+  } catch (error) {
+    logError(
+      `Failed to load tools for agent ${agentId}`,
+      error instanceof Error ? error : new Error(String(error))
+    );
+    return {};
+  }
+}
+
+/**
  * Get MCP tools for a specific agent
  */
 async function getAgentMcpTools(
   agentId: string
-): Promise<Record<string, unknown>> {
+): Promise<Record<string, ToolAction>> {
   try {
     const agentMcpTools = (await prisma.agentMcpTool.findMany({
       where: { agentId },
@@ -129,7 +189,7 @@ async function getAgentMcpTools(
 
     const { mcpManager } = await import('./mcp-config');
 
-    const tools: Record<string, unknown> = {};
+    const tools: Record<string, ToolAction> = {};
     const processedMcps = new Set<string>();
 
     for (const agentMcpTool of agentMcpTools) {
@@ -144,7 +204,7 @@ async function getAgentMcpTools(
 
         for (const toolName of agentToolsFromThisMcp) {
           if (mcpTools[toolName]) {
-            tools[toolName] = mcpTools[toolName];
+            tools[toolName] = mcpTools[toolName] as unknown as ToolAction;
           }
         }
 
@@ -185,7 +245,14 @@ async function buildAgentConfig(
       return null;
     }
 
-    const tools = await getAgentMcpTools(agent.id);
+    // Load both regular tools and MCP tools
+    const [regularTools, mcpTools] = await Promise.all([
+      getAgentTools(agent.id),
+      getAgentMcpTools(agent.id),
+    ]);
+
+    // Merge both tool sets (MCP tools take precedence if there's a name conflict)
+    const tools = { ...regularTools, ...mcpTools };
 
     let subAgents: Record<string, AgentConfig> | undefined;
     if (includeSubAgents) {
@@ -222,8 +289,12 @@ async function loadSubAgentsRecursive(
   parentId: string
 ): Promise<Record<string, AgentConfig>> {
   try {
+    const tenantId = getTenantId();
     const subAgents = await prisma.agent.findMany({
-      where: { parentId },
+      where: {
+        parentId,
+        tenantId,
+      },
       include: {
         model: true,
         prompt: true,
@@ -291,8 +362,14 @@ export const getAgentConfig = async (
   includeSubAgents: boolean = true
 ): Promise<AgentConfig> => {
   try {
+    const tenantId = getTenantId();
     const agent = await prisma.agent.findUniqueOrThrow({
-      where: { name: agentName },
+      where: {
+        name_tenantId: {
+          name: agentName,
+          tenantId,
+        },
+      },
       include: {
         model: true,
         prompt: true,
@@ -321,7 +398,11 @@ export const getAgentConfig = async (
  */
 async function getAgentsFromDb(): Promise<AgentConfig[]> {
   try {
+    const tenantId = getTenantId();
     const agents = await prisma.agent.findMany({
+      where: {
+        tenantId,
+      },
       include: {
         model: true,
         prompt: true,
@@ -356,7 +437,11 @@ let lastKnownAgentListState: AgentListChangeInfo | null = null;
  * Tracks all agents for add/remove/update detection
  */
 const getAgentListChangeInfo = async (): Promise<AgentListChangeInfo> => {
+  const tenantId = getTenantId();
   const agents = await prisma.agent.findMany({
+    where: {
+      tenantId,
+    },
     include: {
       model: true,
       prompt: true,
@@ -364,8 +449,23 @@ const getAgentListChangeInfo = async (): Promise<AgentListChangeInfo> => {
     orderBy: { name: 'asc' },
   });
 
+  // Track the most recent update timestamp across all data
+  let mostRecentUpdate = new Date(0);
+
   const agentDetails = await Promise.all(
     agents.map(async (agent) => {
+      // Track most recent timestamp
+      if (agent.updatedAt > mostRecentUpdate) {
+        mostRecentUpdate = agent.updatedAt;
+      }
+      if (agent.model.updatedAt > mostRecentUpdate) {
+        mostRecentUpdate = agent.model.updatedAt;
+      }
+      if (agent.prompt.updatedAt > mostRecentUpdate) {
+        mostRecentUpdate = agent.prompt.updatedAt;
+      }
+
+      // Get MCP tools
       const agentMcpTools = (await prisma.agentMcpTool.findMany({
         where: { agentId: agent.id },
       })) as Array<{ mcpId: string; toolName: string }>;
@@ -374,13 +474,33 @@ const getAgentListChangeInfo = async (): Promise<AgentListChangeInfo> => {
         agentMcpTools.map((amt) => `${amt.mcpId}:${amt.toolName}`).join('|')
       );
 
-      return `${agent.id}:${agent.name}:${agent.updatedAt.getTime()}:${agent.model.updatedAt.getTime()}:${agent.prompt.updatedAt.getTime()}:${mcpToolsHash}`;
+      // Get regular tools
+      const agentTools = await prisma.agentTool.findMany({
+        where: { agentId: agent.id },
+        include: { tool: true },
+      });
+
+      const toolsHash = createHash(
+        agentTools
+          .map((at) => {
+            if (at.tool.updatedAt > mostRecentUpdate) {
+              mostRecentUpdate = at.tool.updatedAt;
+            }
+            if (at.createdAt > mostRecentUpdate) {
+              mostRecentUpdate = at.createdAt;
+            }
+            return `${at.toolId}:${at.tool.updatedAt.getTime()}`;
+          })
+          .join('|')
+      );
+
+      return `${agent.id}:${agent.name}:${agent.updatedAt.getTime()}:${agent.model.updatedAt.getTime()}:${agent.prompt.updatedAt.getTime()}:${mcpToolsHash}:${toolsHash}`;
     })
   );
 
   return {
     agentsHash: createHash(agentDetails.join('||')),
-    lastUpdated: new Date(),
+    lastUpdated: mostRecentUpdate,
   };
 };
 
@@ -399,24 +519,22 @@ export const hasAgentListChanged = async (): Promise<boolean> => {
     }
 
     const hasChanged =
-      currentInfo.agentsHash !== lastKnownAgentListState.agentsHash ||
-      currentInfo.lastUpdated.getTime() !==
-        lastKnownAgentListState.lastUpdated.getTime();
+      currentInfo.agentsHash !== lastKnownAgentListState.agentsHash;
 
     if (hasChanged) {
       logger.info('Agents config changed:', {
-        agentsChanged:
-          currentInfo.agentsHash !== lastKnownAgentListState.agentsHash,
-        timestampChanged:
-          currentInfo.lastUpdated.getTime() !==
-          lastKnownAgentListState.lastUpdated.getTime(),
         currentHash: currentInfo.agentsHash,
         previousHash: lastKnownAgentListState.agentsHash,
+        currentTimestamp: currentInfo.lastUpdated.toISOString(),
+        previousTimestamp: lastKnownAgentListState.lastUpdated.toISOString(),
       });
 
       lastKnownAgentListState = currentInfo;
     } else {
-      logger.debug('No agent changes detected');
+      logger.debug('No agent changes detected', {
+        hash: currentInfo.agentsHash,
+        timestamp: currentInfo.lastUpdated.toISOString(),
+      });
     }
 
     return hasChanged;
@@ -457,7 +575,7 @@ const agentCache = createChangeAwareCache<AgentConfig[]>(
   async () => getAgentsFromDb(),
   {
     checkInterval: parseInt(process.env.SUB_AGENT_CACHE_TTL ?? '300', 10),
-    dataCacheTtl: 3600,
+    dataCacheTtl: parseInt(process.env.SUB_AGENT_DATA_TTL ?? '86400', 10), // Safety net: force refresh after 24 hours
     changeDetector: async () => {
       const changed = await hasAgentListChanged();
 
@@ -473,7 +591,6 @@ const agentCache = createChangeAwareCache<AgentConfig[]>(
       return changed;
     },
     cacheName: 'AgentCache',
-    enableLogging: process.env.NODE_ENV !== 'production',
   }
 );
 
@@ -503,8 +620,6 @@ function createAgentInstance(config: AgentConfig): Agent {
   if (config.tools && Object.keys(config.tools).length > 0) {
     return new Agent({
       ...baseConfig,
-      // Type assertion needed - MCP tools come from external server as unknown
-      // @ts-expect-error - MCP tool types don't match Mastra ToolAction type exactly
       tools: config.tools,
     });
   }

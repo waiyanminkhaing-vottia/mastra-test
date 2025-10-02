@@ -16,10 +16,9 @@ const mcpServersCache = createChangeAwareCache<McpServer[]>(
   async () => getMcpServersFromDb(),
   {
     checkInterval: parseInt(process.env.MCP_CACHE_TTL ?? '300', 10), // Check for changes every 5 minutes
-    dataCacheTtl: 3600, // Cache data for 1 hour (until change detected)
+    dataCacheTtl: parseInt(process.env.MCP_DATA_TTL ?? '86400', 10), // Safety net: force refresh after 24 hours
     changeDetector: hasMcpServersChanged,
     cacheName: 'McpServersCache',
-    enableLogging: process.env.NODE_ENV !== 'production',
   }
 );
 
