@@ -1,3 +1,4 @@
+import { agentManager } from '../services/agent-config';
 import { mcpManager } from '../services/mcp-config';
 import { logger } from './logger';
 
@@ -10,6 +11,9 @@ export async function initializeServices(): Promise<void> {
   try {
     // Initialize MCP manager (loads all MCP servers and warms cache)
     await mcpManager.initialize();
+
+    // Initialize agent manager (loads all agents except the main agent)
+    await agentManager.initialize();
 
     logger.info('All services initialized successfully');
   } catch (error) {
@@ -24,6 +28,7 @@ export async function initializeServices(): Promise<void> {
 export function getServiceStatus(): Record<string, unknown> {
   return {
     mcpManager: mcpManager.getCacheStats(),
+    agentManager: agentManager.getCacheStats(),
     timestamp: new Date().toISOString(),
   };
 }

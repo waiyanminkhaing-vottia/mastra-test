@@ -3,8 +3,11 @@ import { Agent } from '@mastra/core';
 import { createChangeAwareCache } from '../lib/change-aware-cache';
 import { logger } from '../lib/logger';
 import { sharedMemory } from '../lib/memory';
-import { hasAgentConfigChanged } from '../services/agent-change-detector';
-import { type AgentConfig, getAgentConfig } from '../services/agent-config';
+import {
+  type AgentConfig,
+  getAgentConfig,
+  hasAgentListChanged,
+} from '../services/agent-config';
 import { generateCustomerId } from '../tools/generateCustomerId';
 import { generateReservationId } from '../tools/generateReservationId';
 import { getCurrentTime } from '../tools/getCurrentTime';
@@ -17,7 +20,9 @@ const agentConfigCache = createChangeAwareCache<AgentConfig>(
   {
     checkInterval: parseInt(process.env.AGENT_CONFIG_CACHE_TTL ?? '10', 10), // Check for changes every 10 seconds
     dataCacheTtl: 3600, // Cache data for 1 hour (until change detected)
-    changeDetector: hasAgentConfigChanged,
+    changeDetector: async () =>
+      // Use unified agent change detection for ALL agents
+      hasAgentListChanged(),
     cacheName: `AgentConfigCache:${agentName}`,
     enableLogging: process.env.NODE_ENV !== 'production',
   }

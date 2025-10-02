@@ -1,13 +1,45 @@
 import { anthropic } from '@ai-sdk/anthropic';
 import { google } from '@ai-sdk/google';
 import { openai } from '@ai-sdk/openai';
-import { MastraLanguageModel } from '@mastra/core';
+import { Agent, MastraLanguageModel } from '@mastra/core';
 import { Provider } from '@prisma/client';
 import { ollama } from 'ollama-ai-provider-v2';
 
-import { logError } from '../lib/logger';
+import { createChangeAwareCache } from '../lib/change-aware-cache';
+import { logError, logger } from '../lib/logger';
+import { sharedMemory } from '../lib/memory';
 import { prisma } from '../lib/prisma';
 
+// ============================================================================
+// Types & Interfaces
+// ============================================================================
+
+/**
+ * Agent configuration interface
+ * Supports hierarchical sub-agents (agents can have sub-agents)
+ */
+export interface AgentConfig {
+  id: string;
+  name: string;
+  description: string | null;
+  model: MastraLanguageModel;
+  instruction: string;
+  tools?: Record<string, unknown>;
+  subAgents?: Record<string, AgentConfig>;
+}
+
+interface AgentListChangeInfo {
+  agentsHash: string;
+  lastUpdated: Date;
+}
+
+// ============================================================================
+// Utility Functions
+// ============================================================================
+
+/**
+ * Create model instance based on provider
+ */
 const createModelInstance = (
   provider: Provider,
   modelName: string
@@ -22,94 +54,71 @@ const createModelInstance = (
     case Provider.OLLAMA:
       return ollama(modelName);
     default:
-      return openai('gpt-4o'); // fallback
-  }
-};
-
-export interface AgentConfig {
-  id: string;
-  name: string;
-  description: string | null;
-  model: MastraLanguageModel;
-  instruction: string;
-  tools?: Record<string, unknown>;
-}
-
-export const getAgentConfig = async (
-  agentName: string
-): Promise<AgentConfig> => {
-  try {
-    const agent = await prisma.agent.findUniqueOrThrow({
-      where: { name: agentName },
-      include: {
-        model: true,
-        prompt: true,
-        label: true,
-      },
-    });
-
-    let labelId = agent.labelId;
-
-    // If agent has no labelId, check DEMO environment variable
-    if (!agent.labelId && process.env.DEMO && process.env.DEMO !== 'default') {
-      const label = await prisma.promptLabel.findUnique({
-        where: { name: process.env.DEMO },
-      });
-      labelId = label?.id ?? null;
-    }
-
-    let prompt;
-    if (labelId) {
-      prompt = await prisma.promptVersion.findUniqueOrThrow({
-        where: {
-          promptId_labelId: {
-            promptId: agent.promptId,
-            labelId,
-          },
-        },
-      });
-    } else {
-      prompt = await prisma.promptVersion.findFirst({
-        where: { promptId: agent.promptId },
-        orderBy: {
-          version: 'desc',
-        },
-      });
-    }
-
-    if (!prompt) {
-      throw new Error(`No prompt version found for agent ${agentName}`);
-    }
-
-    // Get MCP tools for this agent (cached with agent config)
-    const tools = await getAgentMcpTools(agent.id);
-
-    return {
-      id: agent.id,
-      name: agent.name,
-      description: agent.description,
-      model: createModelInstance(agent.model.provider, agent.model.name),
-      instruction: prompt.content,
-      tools,
-    };
-  } catch (error) {
-    logError(
-      `Failed to get agent config for ${agentName}`,
-      error instanceof Error ? error : new Error(String(error))
-    );
-    throw error;
+      return openai('gpt-4o');
   }
 };
 
 /**
+ * Simple hash function for change detection
+ */
+function createHash(str: string): string {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = (hash << 5) - hash + char;
+    hash = hash & hash;
+  }
+  return hash.toString();
+}
+
+/**
+ * Get label ID with DEMO environment fallback
+ */
+async function resolveLabelId(
+  agentLabelId: string | null
+): Promise<string | null> {
+  if (agentLabelId) {
+    return agentLabelId;
+  }
+
+  if (process.env.DEMO && process.env.DEMO !== 'default') {
+    const label = await prisma.promptLabel.findUnique({
+      where: { name: process.env.DEMO },
+    });
+    return label?.id ?? null;
+  }
+
+  return null;
+}
+
+/**
+ * Get prompt version for agent
+ */
+async function getPromptVersion(promptId: string, labelId: string | null) {
+  if (labelId) {
+    return prisma.promptVersion.findUniqueOrThrow({
+      where: {
+        promptId_labelId: {
+          promptId,
+          labelId,
+        },
+      },
+    });
+  }
+
+  return prisma.promptVersion.findFirst({
+    where: { promptId },
+    orderBy: { version: 'desc' },
+  });
+}
+
+/**
  * Get MCP tools for a specific agent
- * This function is called as part of agent config loading and will be cached with the agent config
  */
 async function getAgentMcpTools(
   agentId: string
 ): Promise<Record<string, unknown>> {
   try {
-    // Get agent's MCP tool assignments
     const agentMcpTools = (await prisma.agentMcpTool.findMany({
       where: { agentId },
     })) as Array<{ mcpId: string; toolName: string }>;
@@ -118,26 +127,21 @@ async function getAgentMcpTools(
       return {};
     }
 
-    // Import mcpManager here to avoid circular dependency
     const { mcpManager } = await import('./mcp-config');
 
     const tools: Record<string, unknown> = {};
     const processedMcps = new Set<string>();
 
-    // Load tools from each assigned MCP server
     for (const agentMcpTool of agentMcpTools) {
-      // Only fetch tools from each MCP server once
       if (!processedMcps.has(agentMcpTool.mcpId)) {
         const mcpTools = await mcpManager.getToolsByServerId(
           agentMcpTool.mcpId
         );
 
-        // Get all tools from this MCP server that are assigned to this agent
         const agentToolsFromThisMcp = agentMcpTools
           .filter((amt) => amt.mcpId === agentMcpTool.mcpId)
           .map((amt) => amt.toolName);
 
-        // Include only the specific tools assigned to this agent
         for (const toolName of agentToolsFromThisMcp) {
           if (mcpTools[toolName]) {
             tools[toolName] = mcpTools[toolName];
@@ -157,3 +161,485 @@ async function getAgentMcpTools(
     return {};
   }
 }
+
+/**
+ * Build agent config from database record
+ */
+async function buildAgentConfig(
+  agent: {
+    id: string;
+    name: string;
+    description: string | null;
+    labelId: string | null;
+    promptId: string;
+    model: { provider: Provider; name: string };
+  },
+  includeSubAgents: boolean = false
+): Promise<AgentConfig | null> {
+  try {
+    const labelId = await resolveLabelId(agent.labelId);
+    const prompt = await getPromptVersion(agent.promptId, labelId);
+
+    if (!prompt) {
+      logger.warn(`No prompt version found for agent ${agent.name}`);
+      return null;
+    }
+
+    const tools = await getAgentMcpTools(agent.id);
+
+    let subAgents: Record<string, AgentConfig> | undefined;
+    if (includeSubAgents) {
+      subAgents = await loadSubAgentsRecursive(agent.id);
+    }
+
+    return {
+      id: agent.id,
+      name: agent.name,
+      description: agent.description,
+      model: createModelInstance(agent.model.provider, agent.model.name),
+      instruction: prompt.content,
+      tools,
+      ...(subAgents && Object.keys(subAgents).length > 0 ? { subAgents } : {}),
+    };
+  } catch (error) {
+    logger.error(
+      `Failed to build config for agent ${agent.name}:`,
+      error as Error
+    );
+    return null;
+  }
+}
+
+// ============================================================================
+// Sub-Agent Loading (Hierarchical)
+// ============================================================================
+
+/**
+ * Load sub-agents recursively based on parentId
+ * Schema: parentId/parent/subAgents relation named "AgentSubAgents"
+ */
+async function loadSubAgentsRecursive(
+  parentId: string
+): Promise<Record<string, AgentConfig>> {
+  try {
+    const subAgents = await prisma.agent.findMany({
+      where: { parentId },
+      include: {
+        model: true,
+        prompt: true,
+        label: true,
+      },
+    });
+
+    if (subAgents.length === 0) {
+      return {};
+    }
+
+    return await buildSubAgentsConfig(subAgents);
+  } catch (error) {
+    logger.error(
+      `Failed to load sub-agents for parent ${parentId}:`,
+      error as Error
+    );
+    return {};
+  }
+}
+
+/**
+ * Build sub-agents config from database records (recursive)
+ */
+async function buildSubAgentsConfig(
+  subAgentsData: Array<unknown>
+): Promise<Record<string, AgentConfig>> {
+  const result: Record<string, AgentConfig> = {};
+
+  for (const agentData of subAgentsData) {
+    const agent = agentData as {
+      id: string;
+      name: string;
+      description: string | null;
+      labelId: string | null;
+      promptId: string;
+      model: { provider: Provider; name: string };
+    };
+
+    const config = await buildAgentConfig(agent, false);
+    if (config) {
+      // Recursively load nested sub-agents
+      const nestedSubAgents = await loadSubAgentsRecursive(agent.id);
+      if (Object.keys(nestedSubAgents).length > 0) {
+        config.subAgents = nestedSubAgents;
+      }
+
+      result[agent.name] = config;
+    }
+  }
+
+  return result;
+}
+
+// ============================================================================
+// Public API
+// ============================================================================
+
+/**
+ * Get agent configuration by name
+ * Recursively loads all sub-agents if requested
+ */
+export const getAgentConfig = async (
+  agentName: string,
+  includeSubAgents: boolean = true
+): Promise<AgentConfig> => {
+  try {
+    const agent = await prisma.agent.findUniqueOrThrow({
+      where: { name: agentName },
+      include: {
+        model: true,
+        prompt: true,
+        label: true,
+      },
+    });
+
+    const config = await buildAgentConfig(agent, includeSubAgents);
+
+    if (!config) {
+      throw new Error(`Failed to build config for agent ${agentName}`);
+    }
+
+    return config;
+  } catch (error) {
+    logError(
+      `Failed to get agent config for ${agentName}`,
+      error instanceof Error ? error : new Error(String(error))
+    );
+    throw error;
+  }
+};
+
+/**
+ * Get all agents from database
+ */
+async function getAgentsFromDb(): Promise<AgentConfig[]> {
+  try {
+    const agents = await prisma.agent.findMany({
+      include: {
+        model: true,
+        prompt: true,
+        label: true,
+      },
+    });
+
+    const configs: AgentConfig[] = [];
+
+    for (const agent of agents) {
+      const config = await buildAgentConfig(agent, false);
+      if (config) {
+        configs.push(config);
+      }
+    }
+
+    return configs;
+  } catch (error) {
+    logger.error('Failed to fetch agents from database:', error as Error);
+    return [];
+  }
+}
+
+// ============================================================================
+// Change Detection
+// ============================================================================
+
+let lastKnownAgentListState: AgentListChangeInfo | null = null;
+
+/**
+ * Get current agent list change information
+ * Tracks all agents for add/remove/update detection
+ */
+const getAgentListChangeInfo = async (): Promise<AgentListChangeInfo> => {
+  const agents = await prisma.agent.findMany({
+    include: {
+      model: true,
+      prompt: true,
+    },
+    orderBy: { name: 'asc' },
+  });
+
+  const agentDetails = await Promise.all(
+    agents.map(async (agent) => {
+      const agentMcpTools = (await prisma.agentMcpTool.findMany({
+        where: { agentId: agent.id },
+      })) as Array<{ mcpId: string; toolName: string }>;
+
+      const mcpToolsHash = createHash(
+        agentMcpTools.map((amt) => `${amt.mcpId}:${amt.toolName}`).join('|')
+      );
+
+      return `${agent.id}:${agent.name}:${agent.updatedAt.getTime()}:${agent.model.updatedAt.getTime()}:${agent.prompt.updatedAt.getTime()}:${mcpToolsHash}`;
+    })
+  );
+
+  return {
+    agentsHash: createHash(agentDetails.join('||')),
+    lastUpdated: new Date(),
+  };
+};
+
+/**
+ * Check if any agent has changed
+ * Detects changes to: list, agent config, model, prompt, MCP tools
+ */
+export const hasAgentListChanged = async (): Promise<boolean> => {
+  try {
+    const currentInfo = await getAgentListChangeInfo();
+
+    if (!lastKnownAgentListState) {
+      lastKnownAgentListState = currentInfo;
+      logger.info('First time checking agents, treating as changed');
+      return true;
+    }
+
+    const hasChanged =
+      currentInfo.agentsHash !== lastKnownAgentListState.agentsHash ||
+      currentInfo.lastUpdated.getTime() !==
+        lastKnownAgentListState.lastUpdated.getTime();
+
+    if (hasChanged) {
+      logger.info('Agents config changed:', {
+        agentsChanged:
+          currentInfo.agentsHash !== lastKnownAgentListState.agentsHash,
+        timestampChanged:
+          currentInfo.lastUpdated.getTime() !==
+          lastKnownAgentListState.lastUpdated.getTime(),
+        currentHash: currentInfo.agentsHash,
+        previousHash: lastKnownAgentListState.agentsHash,
+      });
+
+      lastKnownAgentListState = currentInfo;
+    } else {
+      logger.debug('No agent changes detected');
+    }
+
+    return hasChanged;
+  } catch (error) {
+    logger.error('Failed to check agent changes:', error as Error);
+    return false;
+  }
+};
+
+/**
+ * Force refresh agent change detection
+ */
+export const refreshAgentListChangeDetection = async (): Promise<void> => {
+  try {
+    const currentInfo = await getAgentListChangeInfo();
+    lastKnownAgentListState = currentInfo;
+    logger.info('Refreshed agent change detection');
+  } catch (error) {
+    logger.error('Failed to refresh agent change detection:', error as Error);
+  }
+};
+
+/**
+ * Clear agent change detection cache
+ */
+export const clearAgentListChangeDetectionCache = (): void => {
+  lastKnownAgentListState = null;
+  logger.info('Cleared agent change detection cache');
+};
+
+// ============================================================================
+// Change-Aware Cache
+// ============================================================================
+
+let onAgentListChangedCallback: (() => Promise<void>) | null = null;
+
+const agentCache = createChangeAwareCache<AgentConfig[]>(
+  async () => getAgentsFromDb(),
+  {
+    checkInterval: parseInt(process.env.SUB_AGENT_CACHE_TTL ?? '300', 10),
+    dataCacheTtl: 3600,
+    changeDetector: async () => {
+      const changed = await hasAgentListChanged();
+
+      if (changed && onAgentListChangedCallback) {
+        try {
+          await onAgentListChangedCallback();
+          logger.info('Notified agent info caches of list change');
+        } catch (error) {
+          logger.error('Failed to notify agent list change:', error as Error);
+        }
+      }
+
+      return changed;
+    },
+    cacheName: 'AgentCache',
+    enableLogging: process.env.NODE_ENV !== 'production',
+  }
+);
+
+/**
+ * Register callback for agent list changes
+ */
+export function onAgentListChanged(callback: () => Promise<void>): void {
+  onAgentListChangedCallback = callback;
+}
+
+// ============================================================================
+// Agent Manager
+// ============================================================================
+
+/**
+ * Create an Agent instance from config
+ */
+function createAgentInstance(config: AgentConfig): Agent {
+  const baseConfig = {
+    name: config.name,
+    description: config.description ?? undefined,
+    instructions: config.instruction,
+    model: config.model,
+    memory: sharedMemory,
+  };
+
+  if (config.tools && Object.keys(config.tools).length > 0) {
+    return new Agent({
+      ...baseConfig,
+      // Type assertion needed - MCP tools come from external server as unknown
+      // @ts-expect-error - MCP tool types don't match Mastra ToolAction type exactly
+      tools: config.tools,
+    });
+  }
+
+  return new Agent(baseConfig);
+}
+
+/**
+ * Agent manager using change-aware-cache pattern
+ * Manages all agents with automatic reload on changes
+ */
+class AgentManager {
+  private agents = new Map<string, Agent>();
+  private isInitialized = false;
+
+  async initialize(): Promise<void> {
+    if (this.isInitialized) {
+      logger.debug('Agent manager already initialized');
+      return;
+    }
+
+    logger.info('Initializing agent manager...');
+
+    try {
+      const configs = await agentCache.get('agents');
+      await this.loadAgents(configs);
+
+      this.isInitialized = true;
+      logger.info(`Agent manager initialized with ${this.agents.size} agents`);
+    } catch (error) {
+      logger.error('Failed to initialize agent manager:', error as Error);
+      throw error;
+    }
+  }
+
+  isReady(): boolean {
+    return this.isInitialized;
+  }
+
+  async getAgent(agentName: string): Promise<Agent | null> {
+    if (this.agents.has(agentName)) {
+      return this.agents.get(agentName) ?? null;
+    }
+
+    const configs = await agentCache.get('agents');
+    const config = configs.find((c) => c.name === agentName);
+
+    if (!config) {
+      logger.warn(`Agent '${agentName}' not found`);
+      return null;
+    }
+
+    const agent = createAgentInstance(config);
+    this.agents.set(agentName, agent);
+
+    return agent;
+  }
+
+  async getAllAgents(): Promise<Map<string, Agent>> {
+    const configs = await agentCache.get('agents');
+
+    for (const config of configs) {
+      if (!this.agents.has(config.name)) {
+        const agent = createAgentInstance(config);
+        this.agents.set(config.name, agent);
+      }
+    }
+
+    return new Map(this.agents);
+  }
+
+  async getAgentsRecord(): Promise<Record<string, Agent>> {
+    const agentsMap = await this.getAllAgents();
+    return Object.fromEntries(agentsMap);
+  }
+
+  async listAgentNames(): Promise<string[]> {
+    const configs = await agentCache.get('agents');
+    return configs.map((c) => c.name);
+  }
+
+  async listAgents(): Promise<AgentConfig[]> {
+    return agentCache.get('agents');
+  }
+
+  async refresh(): Promise<void> {
+    logger.info('Refreshing agent instances...');
+
+    this.agents.clear();
+    agentCache.invalidate('agents');
+
+    if (this.isInitialized) {
+      const configs = await agentCache.get('agents');
+      await this.loadAgents(configs);
+    }
+
+    logger.info(`Agent manager refreshed with ${this.agents.size} agents`);
+  }
+
+  getCacheStats(): {
+    agentCount: number;
+    initialized: boolean;
+    agentNames: string[];
+  } {
+    return {
+      agentCount: this.agents.size,
+      initialized: this.isInitialized,
+      agentNames: Array.from(this.agents.keys()),
+    };
+  }
+
+  private async loadAgents(configs: AgentConfig[]): Promise<void> {
+    this.agents.clear();
+
+    for (const config of configs) {
+      try {
+        const agent = createAgentInstance(config);
+        this.agents.set(config.name, agent);
+        logger.debug(`Loaded agent: ${config.name}`);
+      } catch (error) {
+        logger.error(`Failed to create agent ${config.name}:`, error as Error);
+      }
+    }
+
+    logger.info(`Loaded ${configs.length} agents`);
+  }
+}
+
+// ============================================================================
+// Exports
+// ============================================================================
+
+export const agentManager = new AgentManager();
+
+// Register automatic refresh on agent list changes
+onAgentListChanged(async () => {
+  await agentManager.refresh();
+});
