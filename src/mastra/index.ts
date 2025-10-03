@@ -26,13 +26,18 @@ if (!mainAgent) {
   throw new Error(`Main agent '${mainAgentName}' not found in agent cache`);
 }
 
+// Convert all agents to a record for registration
+const agentsRecord = Object.fromEntries(
+  Array.from(allAgents.values()).map((agent) => [agent.name, agent])
+);
+
 // ============================================================================
 // Mastra Configuration
 // ============================================================================
 
 export const mastra = new Mastra({
   logger,
-  agents: { [mainAgentName]: mainAgent },
+  agents: agentsRecord,
   storage: sharedStorage,
   vectors: { pgVector: sharedVector },
   server: {

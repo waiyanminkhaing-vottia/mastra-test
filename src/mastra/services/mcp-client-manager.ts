@@ -198,12 +198,19 @@ class McpClientManager {
           continue;
         }
 
-        const tool = toolsets[serverName]?.[toolName] as ToolAction | undefined;
+        // Strip server prefix from toolName if present
+        const strippedToolName = toolName.startsWith(`${serverName}_`)
+          ? toolName.slice(`${serverName}_`.length)
+          : toolName;
+
+        const tool = toolsets[serverName]?.[strippedToolName] as
+          | ToolAction
+          | undefined;
         if (tool) {
-          tools[`${mcpId}:${toolName}`] = tool;
+          tools[strippedToolName] = tool;
         } else {
           logger.warn(
-            `Tool '${toolName}' not found on server '${serverName}' (MCP ${mcpId}) for agent ${agentId}`
+            `Tool '${strippedToolName}' not found on server '${serverName}' (MCP ${mcpId}) for agent ${agentId}`
           );
         }
       }

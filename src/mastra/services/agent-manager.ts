@@ -91,6 +91,15 @@ async function getAgentToolIds(agentId: string): Promise<string[]> {
   return agentTools.map((at) => at.toolId);
 }
 
+async function getAgentMcpToolKeys(agentId: string): Promise<string[]> {
+  const agentMcpTools = await prisma.agentMcpTool.findMany({
+    where: { agentId },
+    select: { mcpId: true, toolName: true },
+  });
+
+  return agentMcpTools.map((t) => `${t.mcpId}:${t.toolName}`);
+}
+
 async function getSubAgentIds(parentId: string): Promise<string[]> {
   try {
     const tenantId = getTenantId();
@@ -228,7 +237,8 @@ async function createAgentInstance(agentData: AgentData): Promise<Agent> {
         `tools:${agentData.id}`,
         async () => {
           const toolIds = await getAgentToolIds(agentData.id);
-          return createHash(toolIds.sort().join(','));
+          const mcpToolKeys = await getAgentMcpToolKeys(agentData.id);
+          return createHash([...toolIds, ...mcpToolKeys].sort().join(','));
         },
         async () => loadTools(agentData.id)
       ),
