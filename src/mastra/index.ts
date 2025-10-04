@@ -16,7 +16,11 @@ await initializeServices();
 // Main Agent Setup
 // ============================================================================
 
-const mainAgentName = process.env.MAIN_AGENT_NAME ?? 'main-agent';
+const mainAgentName = process.env.MAIN_AGENT_NAME;
+
+if (!mainAgentName) {
+  throw new Error('MAIN_AGENT_NAME environment variable is not set');
+}
 const allAgents = await agentManager.getAll();
 const mainAgent = Array.from(allAgents.values()).find(
   (agent) => agent.name === mainAgentName
@@ -26,10 +30,8 @@ if (!mainAgent) {
   throw new Error(`Main agent '${mainAgentName}' not found in agent cache`);
 }
 
-// Convert all agents to a record for registration
-const agentsRecord = Object.fromEntries(
-  Array.from(allAgents.values()).map((agent) => [agent.name, agent])
-);
+// Load only the main agent
+const agentsRecord = { [mainAgent.name]: mainAgent };
 
 // ============================================================================
 // Mastra Configuration

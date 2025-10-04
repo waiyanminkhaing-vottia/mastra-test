@@ -49,14 +49,12 @@ export class CacheManager<T> {
     this.loadData = options.loadData;
     this.getChangeHash = options.getChangeHash;
 
-    const ttlSeconds = options.ttlSeconds ?? 3600;
     const checkPeriodSeconds = options.checkPeriodSeconds ?? 600;
-
     this.checkThrottleMs = checkPeriodSeconds * 1000;
 
     this.cache = new NodeCache({
-      stdTTL: ttlSeconds,
-      checkperiod: checkPeriodSeconds,
+      stdTTL: 0, // Disable TTL - we handle cache invalidation manually via change detection
+      checkperiod: 0, // Disable automatic expiration checks
       useClones: false,
     });
   }
