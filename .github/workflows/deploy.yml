@@ -204,6 +204,8 @@ jobs:
           SCRIPT_EOF
 
           # Copy script to remote and execute
+          # First, remove any old script to avoid caching issues
+          ssh ${{ env.LIGHTSAIL_USER }}@${{ env.LIGHTSAIL_HOST }} "rm -f /tmp/build_script.sh"
           scp build_script.sh ${{ env.LIGHTSAIL_USER }}@${{ env.LIGHTSAIL_HOST }}:/tmp/
           ssh ${{ env.LIGHTSAIL_USER }}@${{ env.LIGHTSAIL_HOST }} \
             "chmod +x /tmp/build_script.sh && export GITHUB_TOKEN='${{ secrets.COMMON_ACCESS_TOKEN }}' && /tmp/build_script.sh"
