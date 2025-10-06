@@ -15,7 +15,7 @@ export { getCurrentTime } from './getCurrentTime';
 // ============================================================================
 
 export const toolsMap = {
-  generateCustomerId,
-  generateReservationId,
-  getCurrentTime,
+  [generateCustomerId.id]: generateCustomerId,
+  [generateReservationId.id]: generateReservationId,
+  [getCurrentTime.id]: getCurrentTime,
 };

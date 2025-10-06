@@ -2,7 +2,7 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 export const generateCustomerId = createTool({
-  id: 'generateCustomerId',
+  id: 'generate_customer_Id',
   description: '新規顧客用のユニークな顧客IDを生成します',
   inputSchema: z.object({}),
   outputSchema: z.object({

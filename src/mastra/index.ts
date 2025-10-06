@@ -13,25 +13,21 @@ import { agentManager } from './services/agent-manager';
 await initializeServices();
 
 // ============================================================================
-// Main Agent Setup
+// Load All Agents
 // ============================================================================
 
-const mainAgentName = process.env.MAIN_AGENT_NAME;
-
-if (!mainAgentName) {
-  throw new Error('MAIN_AGENT_NAME environment variable is not set');
-}
 const allAgents = await agentManager.getAll();
-const mainAgent = Array.from(allAgents.values()).find(
-  (agent) => agent.name === mainAgentName
+
+// Convert Map to Record for Mastra
+const agentsRecord = Object.fromEntries(
+  Array.from(allAgents.values()).map((agent) => [agent.name, agent])
 );
 
-if (!mainAgent) {
-  throw new Error(`Main agent '${mainAgentName}' not found in agent cache`);
-}
-
-// Load only the main agent
-const agentsRecord = { [mainAgent.name]: mainAgent };
+logger.info(
+  `Loaded ${allAgents.size} agents: ${Array.from(allAgents.values())
+    .map((a) => a.name)
+    .join(', ')}`
+);
 
 // ============================================================================
 // Mastra Configuration
