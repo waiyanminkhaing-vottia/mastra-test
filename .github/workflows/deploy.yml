@@ -11,14 +11,14 @@ on:
         options:
           - development
           - production
-      service:
-        description: 'Service to deploy'
+      tenant:
+        description: 'Tenant to deploy'
         required: true
         default: 'default'
         type: choice
         options:
           - default
-          - fasthelp
+          - wai
 
 jobs:
   deploy:
@@ -75,14 +75,14 @@ jobs:
 
           # Clone/update repository with authentication
           BRANCH="${{ github.ref_name }}"
-          SERVICE="${{ github.event.inputs.service }}"
-          IMAGE_NAME="mastra-test-${BRANCH}-${SERVICE}"
+          TENANT="${{ github.event.inputs.tenant }}"
+          IMAGE_NAME="mastra-test-${BRANCH}-${TENANT}"
 
           echo "Deploying from branch: $BRANCH"
-          echo "Service: $SERVICE"
+          echo "Tenant: $TENANT"
           echo "Image name: $IMAGE_NAME"
 
-          # Clean up old images for this branch and service (keep latest 3)
+          # Clean up old images for this branch and tenant (keep latest 3)
           sudo docker images localhost:5000/$IMAGE_NAME --format "{{.ID}} {{.CreatedAt}}" | sort -k2 -r | tail -n +4 | awk '{print $1}' | xargs -r sudo docker rmi || true
 
           # Configure git with token authentication
@@ -168,8 +168,8 @@ jobs:
             exit 1
           fi
 
-          # Set port based on service
-          if [ "$SERVICE" = "fasthelp" ]; then
+          # Set port based on tenant
+          if [ "$TENANT" = "wai" ]; then
             PORT=4002
           else
             PORT=4001
@@ -216,15 +216,15 @@ jobs:
             # Ensure Docker network exists
             sudo docker network create mastra-test-network --driver bridge 2>/dev/null || true
 
-            # Set environment file and service based on manual input
+            # Set environment file and tenant based on manual input
             ENV_FILE="${{ github.event.inputs.environment }}"
-            SERVICE="${{ github.event.inputs.service }}"
+            TENANT="${{ github.event.inputs.tenant }}"
             BRANCH="${{ github.ref_name }}"
 
-            # Map service to port and container name (same database for all services)
-            if [ "$SERVICE" = "fasthelp" ]; then
+            # Map tenant to port and container name (same database for all tenants)
+            if [ "$TENANT" = "wai" ]; then
               PORT=4002
-              CONTAINER_NAME="mastra-test-fasthelp"
+              CONTAINER_NAME="mastra-test-wai"
             else
               PORT=4001
               CONTAINER_NAME="mastra-test"
@@ -238,10 +238,10 @@ jobs:
             sudo docker stop $CONTAINER_NAME 2>/dev/null || true
             sudo docker rm $CONTAINER_NAME 2>/dev/null || true
 
-            # Create image name with branch and service
-            IMAGE_NAME="mastra-test-${BRANCH}-${SERVICE}"
+            # Create image name with branch and tenant
+            IMAGE_NAME="mastra-test-${BRANCH}-${TENANT}"
 
-            echo "Deploying service: $SERVICE"
+            echo "Deploying tenant: $TENANT"
             echo "Using environment: $ENV_FILE"
             echo "Using branch: $BRANCH"
             echo "Using port: $PORT"
@@ -257,7 +257,7 @@ jobs:
             sudo grep -E "^(LOG_LEVEL|PORT|NODE_ENV)" "/opt/mastra-test/.env.$ENV_FILE" || echo "No safe variables found"
 
             # Deploy container with environment-specific configuration
-            echo "🚀 Deploying service: $SERVICE with environment: $ENV_FILE on port: $PORT"
+            echo "🚀 Deploying tenant: $TENANT with environment: $ENV_FILE on port: $PORT"
 
             # Deploy with env file and database URLs from GitHub secrets
             sudo docker run -d \
@@ -267,6 +267,7 @@ jobs:
               -p $PORT:$PORT \
               --env-file "/opt/mastra-test/.env.$ENV_FILE" \
               -e PORT=$PORT \
+              -e TENANT_ID=$TENANT \
               -e DATABASE_URL="postgresql://${{ vars.POSTGRES_USER }}:${{ secrets.POSTGRES_PASSWORD }}@postgres-pgvector:5432/${{ vars.POSTGRES_DB }}" \
               -e AGENT_DATABASE_URL="postgresql://${{ vars.POSTGRES_USER }}:${{ secrets.POSTGRES_PASSWORD }}@postgres-pgvector:5432/${{ vars.AGENT_POSTGRES_DB }}" \
               -e OPENAI_API_KEY="${{ secrets.OPENAI_API_KEY }}" \
@@ -274,7 +275,7 @@ jobs:
 
             # Debug: Check safe environment variables in running container
             echo "🔍 Safe environment variables in container:"
-            sudo docker exec $CONTAINER_NAME env | grep -E "^(PORT|NODE_ENV)" | sort || echo "No safe env vars found"
+            sudo docker exec $CONTAINER_NAME env | grep -E "^(PORT|NODE_ENV|TENANT_ID)" | sort || echo "No safe env vars found"
 
             # Clean up old images (keep running container image)
             sudo docker images "*mastra-test*" --format "{{.ID}} {{.CreatedAt}}" | sort -k2 -r | tail -n +3 | awk '{print $1}' | xargs -r sudo docker rmi || true
@@ -287,26 +288,26 @@ jobs:
           ssh ${{ env.LIGHTSAIL_USER }}@${{ env.LIGHTSAIL_HOST }} << 'EOF'
             echo "🔍 Verifying deployment..."
 
-            # Map service to port and container name (same database for all services)
-            SERVICE="${{ github.event.inputs.service }}"
+            # Map tenant to port and container name (same database for all tenants)
+            TENANT="${{ github.event.inputs.tenant }}"
             ENV_FILE="${{ github.event.inputs.environment }}"
             BRANCH="${{ github.ref_name }}"
 
-            if [ "$SERVICE" = "fasthelp" ]; then
+            if [ "$TENANT" = "wai" ]; then
               PORT=4002
-              CONTAINER_NAME="mastra-test-fasthelp"
+              CONTAINER_NAME="mastra-test-wai"
             else
               PORT=4001
               CONTAINER_NAME="mastra-test"
             fi
 
-            # Create image name with branch and service
-            IMAGE_NAME="mastra-test-${BRANCH}-${SERVICE}"
+            # Create image name with branch and tenant
+            IMAGE_NAME="mastra-test-${BRANCH}-${TENANT}"
 
             # Get registry IP
             REGISTRY_IP=$(sudo docker inspect local-registry --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}')
 
-            echo "Verifying service: $SERVICE on port: $PORT"
+            echo "Verifying tenant: $TENANT on port: $PORT"
 
             echo "Checking container status..."
             sudo docker ps | grep $CONTAINER_NAME
@@ -355,6 +356,7 @@ jobs:
                   -p $PORT:$PORT \
                   --env-file "/opt/mastra-test/.env.$ENV_FILE" \
                   -e PORT=$PORT \
+                  -e TENANT_ID=$TENANT \
                   -e DATABASE_URL="postgresql://${{ vars.POSTGRES_USER }}:${{ secrets.POSTGRES_PASSWORD }}@postgres-pgvector:5432/${{ vars.POSTGRES_DB }}" \
                   -e AGENT_DATABASE_URL="postgresql://${{ vars.POSTGRES_USER }}:${{ secrets.POSTGRES_PASSWORD }}@postgres-pgvector:5432/${{ vars.AGENT_POSTGRES_DB }}" \
                   -e OPENAI_API_KEY="${{ secrets.OPENAI_API_KEY }}" \

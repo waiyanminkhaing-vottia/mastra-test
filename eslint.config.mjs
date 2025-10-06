@@ -40,6 +40,12 @@ export default [
         __filename: 'readonly',
         module: 'readonly',
         require: 'readonly',
+        URL: 'readonly',
+        NodeJS: 'readonly',
+        setInterval: 'readonly',
+        clearInterval: 'readonly',
+        setTimeout: 'readonly',
+        clearTimeout: 'readonly',
       },
     },
     plugins: {

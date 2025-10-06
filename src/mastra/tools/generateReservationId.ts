@@ -2,7 +2,7 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 export const generateReservationId = createTool({
-  id: 'generateReservationId',
+  id: 'generate_reservation_Id',
   description: '修理予約用のユニークな予約IDを生成します',
   inputSchema: z.object({}),
   outputSchema: z.object({

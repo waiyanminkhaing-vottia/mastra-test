@@ -2,7 +2,7 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 export const getCurrentTime = createTool({
-  id: 'getCurrentTime',
+  id: 'get_current_time',
   description: '現在の日本標準時（JST）の日付と時刻を取得します',
   inputSchema: z.object({}),
   outputSchema: z.object({
