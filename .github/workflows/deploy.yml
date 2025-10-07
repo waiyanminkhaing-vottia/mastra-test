@@ -198,6 +198,8 @@ jobs:
 
           # Push to local registry
           sudo docker push $REGISTRY_IP:5000/$IMAGE_NAME:latest
+
+          # Clean up token file
           rm -f /tmp/github_token
 
           echo "✅ Image built and pushed: localhost:5000/$IMAGE_NAME:latest"
