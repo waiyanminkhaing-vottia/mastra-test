@@ -176,6 +176,50 @@ class McpClientManager {
     return data?.serverNames.get(mcpId) ?? null;
   }
 
+  private stripServerPrefix(toolName: string, serverName: string): string {
+    return toolName.startsWith(`${serverName}_`)
+      ? toolName.slice(`${serverName}_`.length)
+      : toolName;
+  }
+
+  private isValidToolSchema(tool: ToolAction): boolean {
+    try {
+      const schema = tool.inputSchema as unknown;
+      return Boolean(
+        schema &&
+          typeof schema === 'object' &&
+          '_def' in schema &&
+          (schema as { _def?: unknown })._def
+      );
+    } catch {
+      return false;
+    }
+  }
+
+  private addToolIfValid(
+    tools: Record<string, ToolAction>,
+    tool: ToolAction | undefined,
+    toolName: string,
+    serverName: string,
+    mcpId: string,
+    agentId: string
+  ): void {
+    if (!tool) {
+      logger.warn(
+        `Tool '${toolName}' not found on server '${serverName}' (MCP ${mcpId}) for agent ${agentId}`
+      );
+      return;
+    }
+
+    if (this.isValidToolSchema(tool)) {
+      tools[toolName] = tool;
+    } else {
+      logger.warn(
+        `Tool '${toolName}' has malformed schema on server '${serverName}' (MCP ${mcpId}) for agent ${agentId}`
+      );
+    }
+  }
+
   async getAgentMcpTools(agentId: string): Promise<Record<string, ToolAction>> {
     const data = await this.cache.get();
     if (!data) return {};
@@ -198,21 +242,19 @@ class McpClientManager {
           continue;
         }
 
-        // Strip server prefix from toolName if present
-        const strippedToolName = toolName.startsWith(`${serverName}_`)
-          ? toolName.slice(`${serverName}_`.length)
-          : toolName;
-
+        const strippedToolName = this.stripServerPrefix(toolName, serverName);
         const tool = toolsets[serverName]?.[strippedToolName] as
           | ToolAction
           | undefined;
-        if (tool) {
-          tools[strippedToolName] = tool;
-        } else {
-          logger.warn(
-            `Tool '${strippedToolName}' not found on server '${serverName}' (MCP ${mcpId}) for agent ${agentId}`
-          );
-        }
+
+        this.addToolIfValid(
+          tools,
+          tool,
+          strippedToolName,
+          serverName,
+          mcpId,
+          agentId
+        );
       }
 
       return tools;
