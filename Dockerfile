@@ -22,7 +22,7 @@ RUN --mount=type=secret,id=github_token \
         git config --global url."https://oauth2:$(cat /run/secrets/github_token)@github.com/".insteadOf "https://github.com/"; \
     fi && \
     pnpm config set auto-install-peers false && \
-    pnpm install --no-frozen-lockfile
+    pnpm install --frozen-lockfile
 
 # Rebuild the source code only when needed
 FROM base AS builder
