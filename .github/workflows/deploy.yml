@@ -18,7 +18,8 @@ on:
         type: choice
         options:
           - default
-          - wai
+          - fasthelp
+          - tsuzumi
 
 jobs:
   deploy:
@@ -169,8 +170,10 @@ jobs:
           fi
 
           # Set port based on tenant
-          if [ "$TENANT" = "wai" ]; then
+          if [ "$TENANT" = "fasthelp" ]; then
             PORT=4002
+          elif [ "$TENANT" = "tsuzumi" ]; then
+            PORT=4003
           else
             PORT=4001
           fi
@@ -226,9 +229,12 @@ jobs:
             BRANCH="${{ github.ref_name }}"
 
             # Map tenant to port and container name (same database for all tenants)
-            if [ "$TENANT" = "wai" ]; then
+            if [ "$TENANT" = "fasthelp" ]; then
               PORT=4002
-              CONTAINER_NAME="mastra-test-wai"
+              CONTAINER_NAME="mastra-test-fasthelp"
+            elif [ "$TENANT" = "tsuzumi" ]; then
+              PORT=4003
+              CONTAINER_NAME="mastra-test-tsuzumi"
             else
               PORT=4001
               CONTAINER_NAME="mastra-test"
@@ -275,6 +281,8 @@ jobs:
               -e DATABASE_URL="postgresql://${{ vars.POSTGRES_USER }}:${{ secrets.POSTGRES_PASSWORD }}@postgres-pgvector:5432/${{ vars.POSTGRES_DB }}" \
               -e AGENT_DATABASE_URL="postgresql://${{ vars.POSTGRES_USER }}:${{ secrets.POSTGRES_PASSWORD }}@postgres-pgvector:5432/${{ vars.AGENT_POSTGRES_DB }}" \
               -e OPENAI_API_KEY="${{ secrets.OPENAI_API_KEY }}" \
+              -e AZURE_OPENAI_API_KEY="${{ secrets.AZURE_OPENAI_API_KEY }}" \
+              -e AZURE_OPENAI_ENDPOINT="${{ vars.AZURE_OPENAI_ENDPOINT }}" \
               $REGISTRY_IP:5000/$IMAGE_NAME:latest
 
             # Debug: Check safe environment variables in running container
@@ -297,9 +305,12 @@ jobs:
             ENV_FILE="${{ github.event.inputs.environment }}"
             BRANCH="${{ github.ref_name }}"
 
-            if [ "$TENANT" = "wai" ]; then
+            if [ "$TENANT" = "fasthelp" ]; then
               PORT=4002
-              CONTAINER_NAME="mastra-test-wai"
+              CONTAINER_NAME="mastra-test-fasthelp"
+            elif [ "$TENANT" = "tsuzumi" ]; then
+              PORT=4003
+              CONTAINER_NAME="mastra-test-tsuzumi"
             else
               PORT=4001
               CONTAINER_NAME="mastra-test"
@@ -364,6 +375,8 @@ jobs:
                   -e DATABASE_URL="postgresql://${{ vars.POSTGRES_USER }}:${{ secrets.POSTGRES_PASSWORD }}@postgres-pgvector:5432/${{ vars.POSTGRES_DB }}" \
                   -e AGENT_DATABASE_URL="postgresql://${{ vars.POSTGRES_USER }}:${{ secrets.POSTGRES_PASSWORD }}@postgres-pgvector:5432/${{ vars.AGENT_POSTGRES_DB }}" \
                   -e OPENAI_API_KEY="${{ secrets.OPENAI_API_KEY }}" \
+                  -e AZURE_OPENAI_API_KEY="${{ secrets.AZURE_OPENAI_API_KEY }}" \
+                  -e AZURE_OPENAI_ENDPOINT="${{ vars.AZURE_OPENAI_ENDPOINT }}" \
                   $CURRENT_IMAGE
                 echo "🔄 Rollback completed"
               else
