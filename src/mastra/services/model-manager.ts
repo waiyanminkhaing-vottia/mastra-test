@@ -1,4 +1,5 @@
 import { anthropic } from '@ai-sdk/anthropic';
+import { azure } from '@ai-sdk/azure';
 import { google } from '@ai-sdk/google';
 import { openai } from '@ai-sdk/openai';
 import { MastraLanguageModel } from '@mastra/core';
@@ -26,6 +27,8 @@ function createModelInstance(
       return google(modelName);
     case Provider.OLLAMA:
       return ollama(modelName);
+    case Provider.AZURE_OPENAI:
+      return azure(modelName);
     default:
       return openai('gpt-4o');
   }
