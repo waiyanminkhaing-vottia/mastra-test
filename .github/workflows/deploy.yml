@@ -56,7 +56,7 @@ jobs:
       - name: Build and push Docker image
         run: |
           # Create a temporary script for the remote build
-          cat << 'SCRIPT_EOF' > build_script.sh
+          cat << SCRIPT_EOF > build_script.sh
           #!/bin/bash
           set -e
 
@@ -281,8 +281,8 @@ jobs:
               -e DATABASE_URL="postgresql://${{ vars.POSTGRES_USER }}:${{ secrets.POSTGRES_PASSWORD }}@postgres-pgvector:5432/${{ vars.POSTGRES_DB }}" \
               -e AGENT_DATABASE_URL="postgresql://${{ vars.POSTGRES_USER }}:${{ secrets.POSTGRES_PASSWORD }}@postgres-pgvector:5432/${{ vars.AGENT_POSTGRES_DB }}" \
               -e OPENAI_API_KEY="${{ secrets.OPENAI_API_KEY }}" \
-              -e AZURE_OPENAI_API_KEY="${{ secrets.AZURE_OPENAI_API_KEY }}" \
-              -e AZURE_OPENAI_ENDPOINT="${{ vars.AZURE_OPENAI_ENDPOINT }}" \
+              -e AZURE_API_KEY="${{ secrets.AZURE_API_KEY }}" \
+              -e AZURE_RESOURCE_NAME="${{ vars.AZURE_RESOURCE_NAME }}" \
               $REGISTRY_IP:5000/$IMAGE_NAME:latest
 
             # Debug: Check safe environment variables in running container
@@ -375,8 +375,8 @@ jobs:
                   -e DATABASE_URL="postgresql://${{ vars.POSTGRES_USER }}:${{ secrets.POSTGRES_PASSWORD }}@postgres-pgvector:5432/${{ vars.POSTGRES_DB }}" \
                   -e AGENT_DATABASE_URL="postgresql://${{ vars.POSTGRES_USER }}:${{ secrets.POSTGRES_PASSWORD }}@postgres-pgvector:5432/${{ vars.AGENT_POSTGRES_DB }}" \
                   -e OPENAI_API_KEY="${{ secrets.OPENAI_API_KEY }}" \
-                  -e AZURE_OPENAI_API_KEY="${{ secrets.AZURE_OPENAI_API_KEY }}" \
-                  -e AZURE_OPENAI_ENDPOINT="${{ vars.AZURE_OPENAI_ENDPOINT }}" \
+                  -e AZURE_API_KEY="${{ secrets.AZURE_API_KEY }}" \
+                  -e AZURE_RESOURCE_NAME="${{ vars.AZURE_RESOURCE_NAME }}" \
                   $CURRENT_IMAGE
                 echo "🔄 Rollback completed"
               else
