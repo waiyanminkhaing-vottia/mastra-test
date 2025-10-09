@@ -228,7 +228,15 @@ async function createAgentInstance(agentData: AgentData): Promise<Agent> {
     model: async () =>
       perAgentCache.getWithHash(
         `model:${agentData.id}`,
-        async () => createHash(agentData.modelId),
+        async () => {
+          const modelData = await prisma.model.findUnique({
+            where: { id: agentData.modelId },
+            select: { updatedAt: true },
+          });
+          return createHash(
+            `${agentData.modelId}:${modelData?.updatedAt.getTime() ?? 0}`
+          );
+        },
         async () => loadModel(agentData.modelId)
       ),
 
@@ -238,7 +246,17 @@ async function createAgentInstance(agentData: AgentData): Promise<Agent> {
         async () => {
           const toolIds = await getAgentToolIds(agentData.id);
           const mcpToolKeys = await getAgentMcpToolKeys(agentData.id);
-          return createHash([...toolIds, ...mcpToolKeys].sort().join(','));
+
+          // Include tool updatedAt timestamps in hash
+          const toolsData = await prisma.tool.findMany({
+            where: { id: { in: toolIds } },
+            select: { id: true, updatedAt: true },
+          });
+          const toolHashes = toolsData.map(
+            (t) => `${t.id}:${t.updatedAt.getTime()}`
+          );
+
+          return createHash([...toolHashes, ...mcpToolKeys].sort().join(','));
         },
         async () => loadTools(agentData.id)
       ),
