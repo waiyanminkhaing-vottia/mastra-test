@@ -56,7 +56,7 @@ jobs:
       - name: Build and push Docker image
         run: |
           # Create a temporary script for the remote build
-          cat << SCRIPT_EOF > build_script.sh
+          cat << 'SCRIPT_EOF' > build_script.sh
           #!/bin/bash
           set -e
 
@@ -75,13 +75,11 @@ jobs:
           echo "✅ Using git: $GIT_CMD"
 
           # Clone/update repository with authentication
-          BRANCH="${{ github.ref_name }}"
-          TENANT="${{ github.event.inputs.tenant }}"
-          IMAGE_NAME="mastra-test-${BRANCH}-${TENANT}"
-
           echo "Deploying from branch: $BRANCH"
           echo "Tenant: $TENANT"
-          echo "Image name: $IMAGE_NAME"
+          echo "Image name: mastra-test-${BRANCH}-${TENANT}"
+
+          IMAGE_NAME="mastra-test-${BRANCH}-${TENANT}"
 
           # Clean up old images for this branch and tenant (keep latest 3)
           sudo docker images localhost:5000/$IMAGE_NAME --format "{{.ID}} {{.CreatedAt}}" | sort -k2 -r | tail -n +4 | awk '{print $1}' | xargs -r sudo docker rmi || true
@@ -120,7 +118,6 @@ jobs:
           rm -f ~/.git-credentials
 
           # Set environment file based on manual input
-          ENV_FILE="${{ github.event.inputs.environment }}"
           echo "Using environment: $ENV_FILE"
 
           # Check if env file exists (without exposing contents)
@@ -213,7 +210,7 @@ jobs:
           ssh ${{ env.LIGHTSAIL_USER }}@${{ env.LIGHTSAIL_HOST }} "rm -f /tmp/build_script.sh"
           scp build_script.sh ${{ env.LIGHTSAIL_USER }}@${{ env.LIGHTSAIL_HOST }}:/tmp/
           ssh ${{ env.LIGHTSAIL_USER }}@${{ env.LIGHTSAIL_HOST }} \
-            "chmod +x /tmp/build_script.sh && export GITHUB_TOKEN='${{ secrets.COMMON_ACCESS_TOKEN }}' && /tmp/build_script.sh"
+            "chmod +x /tmp/build_script.sh && export GITHUB_TOKEN='${{ secrets.COMMON_ACCESS_TOKEN }}' && export BRANCH='${{ github.ref_name }}' && export TENANT='${{ github.event.inputs.tenant }}' && export ENV_FILE='${{ github.event.inputs.environment }}' && /tmp/build_script.sh"
 
       - name: Deploy application container
         run: |
